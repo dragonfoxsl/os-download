@@ -1,0 +1,7 @@
+http://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso
+http://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso
+https://mirror.opnsense.org/releases/25.1/OPNsense-25.1-OpenSSL-dvd-amd64.iso
+https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.3.0-amd64-netinst.iso
+https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/debian-13.3.0-amd64-DVD-1.iso
+https://download.sys.truenas.net/TrueNAS-SCALE-Fangtooth/25.04.1/TrueNAS-SCALE-25.04.1.iso
+http://distro.ibiblio.org/puppylinux/puppy-0-1/cd-puppy-0.4.iso
