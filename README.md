@@ -36,14 +36,25 @@ uv run os-download        # download everything that was found
 
 Requires **Python 3.9+** and [uv](https://docs.astral.sh/uv/).
 
+### Install as a global tool (recommended)
+
 ```bash
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Clone and install
+# Install os-download — commands become available everywhere
+uv tool install git+https://github.com/dragonfoxsl/os-download
+```
+
+`os-finder` and `os-download` are now on your PATH. Run them from any directory.
+
+### Development install
+
+```bash
 git clone https://github.com/dragonfoxsl/os-download
 cd os-download
 uv sync
+# Run via uv run os-finder / uv run os-download
 ```
 
 ---
