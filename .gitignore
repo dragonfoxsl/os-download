@@ -15,4 +15,4 @@ all_os_links.txt
 
 # Exclude the contents of the downloads folder
 downloads/*
-!downloads/Usage.md
+!downloads/Usage.mdlogs/
