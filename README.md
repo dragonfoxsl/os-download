@@ -7,8 +7,8 @@
 **os-download** is a two-command Python CLI that finds the latest download URL for every major OS ISO and pulls them to disk with resume support, parallel downloads, and checksum verification.
 
 ```bash
-uv run os-finder          # resolve latest ISO URLs for all supported OSes
-uv run os-download        # download everything that was found
+os-finder          # resolve latest ISO URLs for all supported OSes
+os-download        # download everything that was found
 ```
 
 ---
@@ -34,19 +34,33 @@ uv run os-download        # download everything that was found
 
 ## Installation
 
-Requires **Python 3.9+** and [uv](https://docs.astral.sh/uv/).
+### With uv (recommended)
 
-### Install as a global tool (recommended)
+[uv](https://docs.astral.sh/uv/) installs the tool into an isolated environment and puts `os-finder` and `os-download` on your PATH.
 
 ```bash
-# Install uv
+# 1. Install uv (skip if you already have it)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install os-download — commands become available everywhere
+# 2. Install os-download
 uv tool install git+https://github.com/dragonfoxsl/os-download
 ```
 
-`os-finder` and `os-download` are now on your PATH. Run them from any directory.
+Both commands are now available from any directory.
+
+```bash
+# Upgrade to the latest version at any time
+uv tool upgrade os-download
+
+# Uninstall
+uv tool uninstall os-download
+```
+
+### With pipx
+
+```bash
+pipx install git+https://github.com/dragonfoxsl/os-download
+```
 
 ### Development install
 
@@ -54,7 +68,10 @@ uv tool install git+https://github.com/dragonfoxsl/os-download
 git clone https://github.com/dragonfoxsl/os-download
 cd os-download
 uv sync
-# Run via uv run os-finder / uv run os-download
+
+# Run from the project directory
+uv run os-finder
+uv run os-download
 ```
 
 ---
@@ -65,41 +82,41 @@ uv sync
 
 ```bash
 # All supported OSes (runs in parallel)
-uv run os-finder
+os-finder
 
 # Specific OSes
-uv run os-finder --os ubuntu debian cachyos mxlinux
+os-finder --os ubuntu debian cachyos mxlinux
 
 # Save URLs to a custom path
-uv run os-finder --output ~/isos/urls.txt
+os-finder --output ~/isos/urls.txt
 
 # Increase timeout for slow connections
-uv run os-finder --timeout 30
+os-finder --timeout 30
 
 # Machine-readable JSON output
-uv run os-finder --json
+os-finder --json
 ```
 
 ### Step 2: Download
 
 ```bash
 # Download everything found
-uv run os-download
+os-download
 
 # Three simultaneous downloads
-uv run os-download --parallel 3
+os-download --parallel 3
 
 # Download and verify checksums
-uv run os-download --verify
+os-download --verify
 
 # Download to a specific directory
-uv run os-download --dir /mnt/nas/isos
+os-download --dir /mnt/nas/isos
 
 # Single URL
-uv run os-download --url "https://example.com/file.iso"
+os-download --url "https://example.com/file.iso"
 
 # Skip automatic decompression of .bz2 / .gz files
-uv run os-download --no-decompress
+os-download --no-decompress
 ```
 
 ### Keyboard shortcuts (download dashboard)
