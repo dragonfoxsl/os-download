@@ -5,6 +5,7 @@ description = "Find and download OS ISO images (Ubuntu, Debian, TrueNAS, OPNsens
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "curl-cffi>=0.13.0",
     "requests>=2.25.0",
     "rich>=13.0.0",
 ]

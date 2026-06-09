@@ -326,45 +326,30 @@ class ManjaroKDEFinder(BaseOSFinder):
 class MXLinuxFinder(BaseOSFinder):
     def __init__(self, timeout: int = 15):
         super().__init__("MX Linux", timeout)
-        self.downloads_page = "https://mxlinux.org/download-links/"
-        self.sf_base = "https://sourceforge.net/projects/mx-linux/files/Final/"
+        self.sf_rss   = "https://sourceforge.net/projects/mx-linux/rss?path=/Final&limit=50"
+        self.sf_final = "https://sourceforge.net/projects/mx-linux/files/Final/"
 
     def find_download_links(self) -> Dict[str, str]:
-        # 1. Parse MX Linux official downloads page for SourceForge links
+        # SourceForge RSS feed — no JS required, always current
+        # File structure: Final/Xfce/MX-X.X_Xfce_x64.iso
         try:
-            r = self.session.get(self.downloads_page, timeout=self.timeout)
+            r = self.session.get(self.sf_rss, timeout=self.timeout)
             if r.status_code == 200:
-                links = re.findall(
-                    r'https://sourceforge\.net/projects/mx-linux/files/'
-                    r'(Final/MX-[\d.]+/MX-[\d.]+_x64\.iso)/download',
+                paths = re.findall(
+                    r'files/(Final/Xfce/MX-[\d.]+_Xfce_x64\.iso)/download',
                     r.text,
                 )
-                xfce = [l for l in links if 'KDE' not in l and 'fluxbox' not in l.lower()]
-                chosen = xfce[0] if xfce else (links[0] if links else None)
-                if chosen:
-                    return {'xfce-x64': f"https://downloads.sourceforge.net/project/mx-linux/{chosen}"}
+                if paths:
+                    # Pick the newest version (sort by version numbers in filename)
+                    paths.sort(
+                        key=lambda p: tuple(int(x) for x in re.findall(r'\d+', p)),
+                        reverse=True,
+                    )
+                    return {'xfce-x64': f"https://downloads.sourceforge.net/project/mx-linux/{paths[0]}"}
         except Exception:
             pass
 
-        # 2. Fallback: scrape SourceForge file listing
-        try:
-            r = self.session.get(self.sf_base, timeout=self.timeout)
-            if r.status_code == 200:
-                versions = re.findall(r'title="(MX-[\d.]+)"', r.text)
-                if versions:
-                    versions.sort(key=lambda v: tuple(int(x) for x in re.findall(r'\d+', v)))
-                    latest = versions[-1]
-                    r2 = self.session.get(f"{self.sf_base}{latest}/", timeout=self.timeout)
-                    if r2.status_code == 200:
-                        isos = re.findall(r'title="(MX-[\d.]+_x64\.iso)"', r2.text)
-                        xfce = [i for i in isos if 'KDE' not in i and 'fluxbox' not in i.lower()]
-                        iso = xfce[0] if xfce else (isos[0] if isos else None)
-                        if iso:
-                            return {'xfce-x64': f"https://downloads.sourceforge.net/project/mx-linux/Final/{latest}/{iso}"}
-        except Exception:
-            pass
-
-        return {'download_page': self.downloads_page}
+        return {'download_page': self.sf_final}
 
 
 class PuppyLinuxFinder(BaseOSFinder):

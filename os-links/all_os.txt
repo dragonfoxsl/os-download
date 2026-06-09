@@ -1,10 +1,11 @@
 http://releases.ubuntu.com/26.04/ubuntu-26.04-desktop-amd64.iso
 http://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso
-https://pkg.opnsense.org/releases/26.1/OPNsense-26.1.6-dvd-amd64.iso.bz2
-https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz
 https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.5.0-amd64-netinst.iso
 https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/debian-13.5.0-amd64-DVD-1.iso
+https://pkg.opnsense.org/releases/26.1/OPNsense-26.1.6-dvd-amd64.iso.bz2
+https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz
 https://download.sys.truenas.net/TrueNAS-SCALE-Fangtooth/25.04.1/TrueNAS-SCALE-25.04.1.iso
 https://download.manjaro.org/kde/26.0.4/manjaro-kde-26.0.4-260327-linux618.iso
+https://downloads.sourceforge.net/project/mx-linux/Final/Xfce/MX-25.2_Xfce_x64.iso
 http://distro.ibiblio.org/puppylinux/puppy-fossa/fossapup64-9.5.iso
 https://mirror.cachyos.org/ISO/desktop/260426/cachyos-desktop-linux-260426.iso

@@ -180,6 +180,105 @@ class DownloadManager:
             logger.error("MIDO ERROR  %s  —  %s", variant, e)
             return False
 
+    # ── curl fallback (Cloudflare-protected hosts) ───────────────────────────
+
+    def _download_with_curl(
+        self,
+        url: str,
+        filepath: Path,
+        resume_pos: int,
+        progress: Optional[Progress],
+        task_id: Optional[TaskID],
+        stop_event: Optional[threading.Event],
+    ) -> bool:
+        """Download via the system curl binary. Used when requests gets 403 (Cloudflare)."""
+        if shutil.which("curl") is None:
+            logger.error("CURL_UNAVAILABLE  %s", url)
+            return False
+
+        # Get total size for the progress bar via curl HEAD
+        total_size: Optional[int] = None
+        try:
+            head = subprocess.run(
+                ["curl", "-sIL", url], capture_output=True, text=True, timeout=20
+            )
+            for line in reversed(head.stdout.splitlines()):
+                if line.lower().startswith("content-length:"):
+                    total_size = int(line.split(":", 1)[1].strip())
+                    break
+        except Exception:
+            pass
+
+        if progress is not None and task_id is not None:
+            actual_total = (resume_pos + total_size) if total_size else None
+            progress.update(task_id, total=actual_total, completed=resume_pos)
+
+        cmd = ["curl", "-L", "-s", "-S"]
+        if resume_pos > 0:
+            cmd.extend(["-C", "-"])
+        cmd.extend(["-o", str(filepath), url])
+
+        try:
+            proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+        except Exception as e:
+            logger.error("CURL_SPAWN_ERROR  %s  —  %s", url, e)
+            return False
+
+        last_size = resume_pos
+        while proc.poll() is None:
+            if stop_event and stop_event.is_set():
+                proc.terminate()
+                proc.wait(timeout=3)
+                return False
+            if progress is not None and task_id is not None and filepath.exists():
+                try:
+                    current_size = filepath.stat().st_size
+                    if current_size > last_size:
+                        progress.update(task_id, advance=current_size - last_size)
+                        last_size = current_size
+                except OSError:
+                    pass
+            time.sleep(0.2)
+
+        if progress is not None and task_id is not None and filepath.exists():
+            try:
+                final_size = filepath.stat().st_size
+                if final_size > last_size:
+                    progress.update(task_id, advance=final_size - last_size)
+            except OSError:
+                pass
+
+        if proc.returncode != 0:
+            stderr = (proc.stderr.read().decode(errors="replace").strip()
+                      if proc.stderr else "")
+            logger.error("CURL_FAILED  %s  rc=%d  %s", url, proc.returncode, stderr)
+            return False
+        return True
+
+    def _post_download(
+        self, filepath: Path, url: str, verify: bool, decompress: bool, own_progress: bool
+    ) -> bool:
+        """Decompress and/or verify a freshly downloaded file. Returns False on failure."""
+        if decompress and filepath.suffix.lower() in ('.bz2', '.gz'):
+            filepath = self.decompress(filepath, verbose=own_progress)
+        if verify:
+            result = self.verify_checksum(filepath, url)
+            if result is True:
+                if own_progress:
+                    console.print("  [green]✓ Checksum verified[/]")
+                logger.info("VERIFY OK  %s", filepath.name)
+            elif result is False:
+                if own_progress:
+                    console.print("  [red]✗ Checksum mismatch — file may be corrupt[/]")
+                logger.error("VERIFY FAIL  %s", filepath.name)
+                return False
+            else:
+                if own_progress:
+                    console.print("  [dim]⚠ No checksum available for verification[/]")
+                logger.warning("VERIFY SKIP  %s  (no checksum found)", filepath.name)
+        logger.info("DONE   %s", filepath.name)
+        return True
+
     def _hash_file(self, filepath: Path) -> str:
         sha256 = hashlib.sha256()
         with open(filepath, 'rb') as f:
@@ -268,11 +367,36 @@ class DownloadManager:
         try:
             response = self.session.get(url, headers=headers, stream=True, timeout=30)
 
+            if response.status_code == 403:
+                # Cloudflare or similar bot-blocking: delegate to curl
+                try:
+                    response.close()
+                except Exception:
+                    pass
+                logger.info("CURL_FALLBACK  %s  (403 from requests)", url)
+                if own_progress:
+                    progress = Progress(
+                        TextColumn("[bold cyan]{task.description}"),
+                        BarColumn(),
+                        DownloadColumn(),
+                        TransferSpeedColumn(),
+                        TimeRemainingColumn(),
+                        console=console,
+                    )
+                    task_id = progress.add_task(filename, total=None)
+                    progress.start()
+                ok = self._download_with_curl(url, filepath, resume_pos, progress, task_id, stop_event)
+                if own_progress:
+                    progress.stop()  # type: ignore[union-attr]
+                if not ok:
+                    return False
+                return self._post_download(filepath, url, verify, decompress, own_progress)
+
             if resume_pos > 0:
                 if response.status_code == 416:
                     # Range beyond file end — file may already be complete
                     try:
-                        head = self.session.head(url, timeout=self.timeout, allow_redirects=True)
+                        head = self.session.head(url, timeout=30, allow_redirects=True)
                         server_size = int(head.headers.get('content-length', 0))
                     except Exception:
                         server_size = 0
@@ -330,29 +454,7 @@ class DownloadManager:
                 logger.info("STOPPED  %s  (partial, resumable)", filepath.name)
                 return False
 
-            # Decompress if needed — suppress console output when inside the Live dashboard
-            if decompress and filepath.suffix.lower() in ('.bz2', '.gz'):
-                filepath = self.decompress(filepath, verbose=own_progress)
-
-            # Verify checksum
-            if verify:
-                result = self.verify_checksum(filepath, url)
-                if result is True:
-                    if own_progress:
-                        console.print(f"  [green]✓ Checksum verified[/]")
-                    logger.info("VERIFY OK  %s", filepath.name)
-                elif result is False:
-                    if own_progress:
-                        console.print(f"  [red]✗ Checksum mismatch — file may be corrupt[/]")
-                    logger.error("VERIFY FAIL  %s", filepath.name)
-                    return False
-                else:
-                    if own_progress:
-                        console.print(f"  [dim]⚠ No checksum available for verification[/]")
-                    logger.warning("VERIFY SKIP  %s  (no checksum found)", filepath.name)
-
-            logger.info("DONE   %s", filepath.name)
-            return True
+            return self._post_download(filepath, url, verify, decompress, own_progress)
 
         except KeyboardInterrupt:
             logger.warning("INTERRUPTED  %s", url)
@@ -396,28 +498,10 @@ class DownloadManager:
         mido_urls = [u for u in all_urls if u.startswith("mido://")]
         all_urls  = [u for u in all_urls if not u.startswith("mido://")]
 
-        if resume and interactive:
-            partial = [
-                url for url in all_urls
-                if (self.download_dir / self.get_filename_from_url(url)).exists()
-            ]
-            if partial:
-                n = len(partial)
-                console.print(
-                    f"\n  [yellow]Found {n} partial file{'s' if n != 1 else ''}.[/yellow]"
-                    "  [bold]R[/bold]esume / [bold]s[/bold]tart from scratch?"
-                    "  [dim](Enter = resume)[/dim]  ",
-                    end="",
-                )
-                try:
-                    ans = input().strip().lower()
-                except (EOFError, KeyboardInterrupt):
-                    ans = ''
-                if ans in ('s', 'scratch', 'n', 'no'):
-                    resume = False
-
-        # Skip files downloaded less than 24 hours ago
         urls_to_skip: set = set()
+        recent_urls: set = set()
+
+        # Step 1 — files completed within the last 24 hours (likely complete, offer to skip)
         if interactive:
             recent = []
             for url in all_urls:
@@ -426,6 +510,7 @@ class DownloadManager:
                     age = time.time() - fpath.stat().st_mtime
                     if age < 86400:
                         recent.append((url, fpath.name, age))
+                        recent_urls.add(url)
             if recent:
                 n = len(recent)
                 console.print(
@@ -447,13 +532,36 @@ class DownloadManager:
                 if ans not in ('y', 'yes'):
                     urls_to_skip = {url for url, _, _ in recent}
                 else:
-                    # Delete complete files so the re-download starts from byte 0 (avoids 416)
+                    # Delete files so the re-download starts from byte 0 (avoids 416)
                     for url, _, _ in recent:
                         fpath = self._final_filepath(url, decompress)
                         try:
                             fpath.unlink(missing_ok=True)
                         except Exception:
                             pass
+
+        # Step 2 — files from a previous session (older than 24h): offer resume or scratch
+        # Excludes recently-downloaded files — those are complete, not partial
+        if resume and interactive:
+            partial = [
+                url for url in all_urls
+                if url not in recent_urls
+                and (self.download_dir / self.get_filename_from_url(url)).exists()
+            ]
+            if partial:
+                n = len(partial)
+                console.print(
+                    f"\n  [yellow]Found {n} file{'s' if n != 1 else ''} from a previous session.[/yellow]"
+                    "  [bold]R[/bold]esume / [bold]s[/bold]tart from scratch?"
+                    "  [dim](Enter = resume)[/dim]  ",
+                    end="",
+                )
+                try:
+                    ans = input().strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    ans = ''
+                if ans in ('s', 'scratch', 'n', 'no'):
+                    resume = False
 
         urls_to_try = [u for u in all_urls if u not in urls_to_skip]
 
