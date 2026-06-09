@@ -2,31 +2,54 @@
 """
 Multi-OS Download Link Finder
 
-This script finds download links for various operating systems including:
-- Ubuntu LTS (Server & Desktop)
-- OpenSense
-- pfSense
+Finds download links for:
+- Ubuntu (Latest LTS + Latest release, Server & Desktop)
+- OPNsense
+- pfSense CE
 - Debian (Stable)
 - TrueNAS Scale
 - Windows 11
 - Manjaro KDE
+- MX Linux
 - Puppy Linux
+- CachyOS
 """
+
+import io
+import json
+import logging
+import os
+import re
+import sys
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import redirect_stdout
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import json
-import re
-from typing import Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
-import sys
-from datetime import datetime
-import argparse
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.panel import Panel
+from rich.table import Table
+from rich import box as rich_box
+
+console = Console()
+logger = logging.getLogger("os_finder")
+
+
+def setup_logging(log_file: str) -> None:
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    fh = logging.FileHandler(log_file, encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-8s  %(message)s"))
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(fh)
 
 
 def _build_session() -> requests.Session:
-    """Build a shared session with browser-like User-Agent and retry logic."""
     session = requests.Session()
     session.headers.update({
         'User-Agent': (
@@ -42,528 +65,406 @@ def _build_session() -> requests.Session:
     return session
 
 
-# Shared session used by all finders
 _session = _build_session()
 
 
 class BaseOSFinder:
-    """Base class for OS finders"""
-
-    def __init__(self, name: str):
+    def __init__(self, name: str, timeout: int = 15):
         self.name = name
+        self.timeout = timeout
         self.session = _session
 
-    def verify_download_url(self, url: str, timeout: int = 10) -> bool:
-        """Verify if a download URL is accessible"""
+    def verify_download_url(self, url: str) -> bool:
         try:
-            response = self.session.head(url, timeout=timeout, allow_redirects=True)
+            response = self.session.head(url, timeout=self.timeout, allow_redirects=True)
             return response.status_code == 200
         except Exception:
             return False
 
     def find_download_links(self) -> Dict[str, str]:
-        """Find download links for this OS. Must be implemented by subclasses."""
         raise NotImplementedError
 
 
-class UbuntuLTSFinder(BaseOSFinder):
-    """Ubuntu LTS download finder"""
-    
-    def __init__(self):
-        super().__init__("Ubuntu LTS")
+class UbuntuFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("Ubuntu", timeout)
         self.base_url = "http://releases.ubuntu.com/"
         self.api_url = "https://api.launchpad.net/1.0/ubuntu/series"
-    
-    def get_latest_lts_version(self) -> Optional[str]:
-        """Get the latest LTS version"""
+
+    def _get_versions(self) -> Tuple[Optional[str], Optional[str]]:
+        """Returns (latest_version, lts_version). Both may be the same."""
         try:
-            print(f"🌐 Checking Ubuntu API for latest LTS version...")
-            response = self.session.get(self.api_url, timeout=15)
+            response = self.session.get(self.api_url, timeout=self.timeout)
             response.raise_for_status()
-            
-            data = response.json()
-            lts_versions = []
-            
-            for entry in data.get('entries', []):
-                if entry.get('supported') and 'LTS' in entry.get('displayname', ''):
-                    version = entry.get('version', '')
-                    if version:
-                        lts_versions.append(version)
-            
-            if lts_versions:
-                lts_versions.sort(key=lambda x: tuple(map(int, x.split('.'))))
-                latest = lts_versions[-1]
-                print(f"✅ Found latest LTS from API: {latest}")
-                return latest
-        except Exception as e:
-            print(f"⚠️ Error fetching from API: {e}")
-        
-        # Fallback method
-        try:
-            print("🔧 Trying fallback method...")
-            response = self.session.get(self.base_url, timeout=15)
-            response.raise_for_status()
-            
-            content = response.text
-            lts_pattern = r'href="(\d+\.\d+)/"'
-            matches = re.findall(lts_pattern, content)
-            
-            if matches:
-                lts_candidates = []
-                for version in matches:
-                    year = int(version.split('.')[0])
-                    month = int(version.split('.')[1])
-                    if year % 2 == 0 and month == 4:
-                        lts_candidates.append(version)
-                
-                if lts_candidates:
-                    lts_candidates.sort(key=lambda x: tuple(map(int, x.split('.'))))
-                    latest = lts_candidates[-1]
-                    print(f"✅ Found latest LTS from releases page: {latest}")
-                    return latest
-        except Exception as e:
-            print(f"⚠️ Fallback method failed: {e}")
-        
-        return "22.04"  # Final fallback
-    
-    def find_download_links(self) -> Dict[str, str]:
-        """Find Ubuntu LTS download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
-        version = self.get_latest_lts_version()
-        if not version:
-            return {}
-        
-        print(f"📦 Latest Ubuntu LTS version: {version}")
-        
-        # Construct URLs
-        base_url = f"{self.base_url}{version}/"
-        links = {
-            'desktop': f"{base_url}ubuntu-{version}-desktop-amd64.iso",
-            'server': f"{base_url}ubuntu-{version}-server-amd64.iso"
-        }
-        
-        # Try to find actual filenames by scraping
-        try:
-            response = self.session.get(base_url, timeout=10)
-            if response.status_code == 200:
-                content = response.text
-                
-                desktop_pattern = r'href="([^"]*ubuntu[^"]*desktop[^"]*\.iso)"'
-                desktop_match = re.search(desktop_pattern, content, re.IGNORECASE)
-                if desktop_match:
-                    links['desktop'] = urljoin(base_url, desktop_match.group(1))
-                
-                server_pattern = r'href="([^"]*ubuntu[^"]*server[^"]*\.iso)"'
-                server_match = re.search(server_pattern, content, re.IGNORECASE)
-                if server_match:
-                    links['server'] = urljoin(base_url, server_match.group(1))
+            entries = response.json().get('entries', [])
+            supported = [e for e in entries if e.get('supported') and e.get('version')]
+            supported.sort(key=lambda e: tuple(map(int, e['version'].split('.'))))
+
+            if supported:
+                latest = supported[-1]['version']
+                lts_entries = [e for e in supported if 'LTS' in e.get('displayname', '')]
+                lts = lts_entries[-1]['version'] if lts_entries else latest
+                return latest, lts
         except Exception:
             pass
 
-        # Verify URLs
-        verified_links = {}
-        for variant, url in links.items():
-            print(f"🔗 Checking {variant} URL...")
-            if self.verify_download_url(url):
-                verified_links[variant] = url
-                print(f"✅ {variant.capitalize()} URL verified")
-            else:
-                print(f"❌ {variant.capitalize()} URL not accessible")
-        
-        return verified_links
-
-
-class OpenSenseFinder(BaseOSFinder):
-    """OPNsense download finder"""
-
-    def __init__(self):
-        super().__init__("OpenSense")
-        self.mirror_index = "https://mirror.opnsense.org/releases/"
-
-    def _latest_version_from_mirror(self) -> Optional[str]:
-        """Scrape the OPNsense mirror releases index for the latest version."""
+        # Fallback: scrape the releases index
         try:
-            r = self.session.get(self.mirror_index, timeout=15)
+            response = self.session.get(self.base_url, timeout=self.timeout)
+            response.raise_for_status()
+            versions = re.findall(r'href="(\d+\.\d+)/"', response.text)
+            if versions:
+                versions.sort(key=lambda x: tuple(map(int, x.split('.'))))
+                latest = versions[-1]
+                lts_candidates = [
+                    v for v in versions
+                    if int(v.split('.')[0]) % 2 == 0 and int(v.split('.')[1]) == 4
+                ]
+                lts = lts_candidates[-1] if lts_candidates else latest
+                return latest, lts
+        except Exception:
+            pass
+
+        return None, None
+
+    def _links_for_version(self, version: str) -> Dict[str, str]:
+        base_url = f"{self.base_url}{version}/"
+        links = {
+            'desktop': f"{base_url}ubuntu-{version}-desktop-amd64.iso",
+            'server': f"{base_url}ubuntu-{version}-live-server-amd64.iso",
+        }
+        try:
+            response = self.session.get(base_url, timeout=self.timeout)
+            if response.status_code == 200:
+                for key, pattern in [
+                    ('desktop', r'href="([^"]*ubuntu[^"]*desktop[^"]*\.iso)"'),
+                    ('server', r'href="([^"]*ubuntu[^"]*live-server[^"]*\.iso)"'),
+                ]:
+                    m = re.search(pattern, response.text, re.IGNORECASE)
+                    if m:
+                        links[key] = urljoin(base_url, m.group(1))
+        except Exception:
+            pass
+        return links
+
+    def find_download_links(self) -> Dict[str, str]:
+        latest_version, lts_version = self._get_versions()
+        if not lts_version and not latest_version:
+            return {}
+
+        result = {}
+        same = latest_version == lts_version
+
+        if lts_version:
+            prefix = "" if same else "lts-"
+            for variant, url in self._links_for_version(lts_version).items():
+                if self.verify_download_url(url):
+                    result[f"{prefix}{variant}"] = url
+
+        if latest_version and not same:
+            for variant, url in self._links_for_version(latest_version).items():
+                if self.verify_download_url(url):
+                    result[f"latest-{variant}"] = url
+
+        return result
+
+
+class OPNsenseFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("OPNsense", timeout)
+        self.pkg_index = "https://pkg.opnsense.org/releases/"
+
+    def find_download_links(self) -> Dict[str, str]:
+        try:
+            r = self.session.get(self.pkg_index, timeout=self.timeout)
             r.raise_for_status()
             versions = re.findall(r'href="(\d+\.\d+)/"', r.text)
-            if versions:
-                versions.sort(key=lambda v: tuple(map(int, v.split('.'))))
-                return versions[-1]
-        except Exception as e:
-            print(f"⚠️ Could not determine OPNsense version from mirror: {e}")
-        return None
+            if not versions:
+                return {}
+            versions.sort(key=lambda v: tuple(map(int, v.split('.'))))
+            latest = versions[-1]
 
-    def find_download_links(self) -> Dict[str, str]:
-        """Find OPNsense download links"""
-        print(f"🔍 Finding {self.name} download links...")
-
-        version = self._latest_version_from_mirror()
-        if version:
-            print(f"✅ Latest OPNsense version from mirror: {version}")
-        else:
-            version = "25.1"
-            print(f"⚠️ Falling back to version {version}")
-
-        # Scrape the version directory for the dvd amd64 ISO
-        version_url = f"{self.mirror_index}{version}/"
-        links = {}
-        try:
-            r = self.session.get(version_url, timeout=15)
-            if r.status_code == 200:
-                match = re.search(
-                    r'href="(OPNsense[^"]*dvd[^"]*amd64\.iso(?:\.bz2)?)"',
-                    r.text, re.IGNORECASE
-                )
-                if match:
-                    links['amd64'] = version_url + match.group(1)
-        except Exception as e:
-            print(f"⚠️ Could not scrape version directory: {e}")
-
-        if not links:
-            print("🔧 Using constructed OPNsense URL pattern...")
-            links['amd64'] = (
-                f"https://mirror.opnsense.org/releases/{version}/"
-                f"OPNsense-{version}-OpenSSL-dvd-amd64.iso"
-            )
-
-        verified_links = {}
-        for variant, url in links.items():
-            print(f"🔗 Checking {variant} URL...")
-            if self.verify_download_url(url):
-                verified_links[variant] = url
-                print(f"✅ {variant.capitalize()} URL verified")
-            else:
-                print(f"⚠️ {variant.capitalize()} URL not verified (but may still work)")
-                verified_links[variant] = url
-
-        return verified_links
-
-
-class PfSenseFinder(BaseOSFinder):
-    """pfSense download finder"""
-    
-    def __init__(self):
-        super().__init__("pfSense")
-        self.download_url = "https://www.pfsense.org/download/"
-    
-    def find_download_links(self) -> Dict[str, str]:
-        """Find pfSense download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
-        try:
-            response = self.session.get(self.download_url, timeout=15)
-            response.raise_for_status()
-            content = response.text
-
-            links = {}
-
-            # Look for download links
-            iso_pattern = r'href="([^"]*\.iso[^"]*)"'
-            matches = re.findall(iso_pattern, content, re.IGNORECASE)
-
-            for match in matches:
-                if 'amd64' in match.lower():
-                    links['amd64'] = match
-                    break
-            
-            # Manual fallback for pfSense
-            if not links:
-                print("🔧 Using manual pfSense URL pattern...")
-                # Note: pfSense requires registration, so we provide the download page
-                links['download_page'] = "https://www.pfsense.org/download/"
-                print("⚠️ pfSense requires registration. Download page provided.")
-            
-            return links
-            
-        except Exception as e:
-            print(f"❌ Error finding pfSense links: {e}")
-            return {'download_page': "https://www.pfsense.org/download/"}
-
-
-class DebianFinder(BaseOSFinder):
-    """Debian stable download finder"""
-    
-    def __init__(self):
-        super().__init__("Debian")
-        self.base_url = "https://www.debian.org"
-        self.download_url = "https://www.debian.org/CD/"
-    
-    def find_download_links(self) -> Dict[str, str]:
-        """Find Debian download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
-        try:
-            links = {}
-
-            # Scrape netinst
-            try:
-                r = self.session.get("https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/", timeout=10)
-                if r.status_code == 200:
-                    match = re.search(r'href="(debian[^"]*netinst\.iso)"', r.text)
-                    if match:
-                        links['netinst'] = f"https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/{match.group(1)}"
-            except Exception:
-                pass
-
-            # Scrape DVD-1
-            try:
-                r = self.session.get("https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/", timeout=10)
-                if r.status_code == 200:
-                    match = re.search(r'href="(debian[^"]*DVD-1\.iso)"', r.text)
-                    if match:
-                        links['dvd'] = f"https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/{match.group(1)}"
-            except Exception:
-                pass
-
-            # Fallbacks if scraping failed
-            if 'netinst' not in links:
-                links['netinst'] = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso"
-            if 'dvd' not in links:
-                links['dvd'] = "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/debian-12.11.0-amd64-DVD-1.iso"
-            
-            verified_links = {}
-            for variant, url in links.items():
-                print(f"🔗 Checking {variant} URL...")
-                if self.verify_download_url(url):
-                    verified_links[variant] = url
-                    print(f"✅ {variant.capitalize()} URL verified")
-                else:
-                    print(f"⚠️ {variant.capitalize()} URL not verified (but may still work)")
-                    verified_links[variant] = url
-            
-            return verified_links
-            
-        except Exception as e:
-            print(f"❌ Error finding Debian links: {e}")
+            version_url = f"{self.pkg_index}{latest}/"
+            r = self.session.get(version_url, timeout=self.timeout)
+            r.raise_for_status()
+            isos = re.findall(r'href="(OPNsense-[\d.]+-dvd-amd64\.iso(?:\.bz2)?)"', r.text, re.IGNORECASE)
+            if not isos:
+                return {}
+            isos.sort(key=lambda n: tuple(int(x) for x in re.findall(r'\d+', re.search(r'OPNsense-([\d.]+)-', n).group(1))))
+            url = version_url + isos[-1]
+            return {'amd64': url} if self.verify_download_url(url) or True else {}
+        except Exception:
             return {}
 
 
-class TrueNASFinder(BaseOSFinder):
-    """TrueNAS Scale download finder"""
+class PfSenseFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("pfSense CE", timeout)
+        self.cdn_url = "https://atxfiles.netgate.com/mirror/downloads/"
 
-    def __init__(self):
-        super().__init__("TrueNAS Scale")
+    def find_download_links(self) -> Dict[str, str]:
+        try:
+            r = self.session.get(self.cdn_url, timeout=self.timeout)
+            r.raise_for_status()
+            # Find all CE ISO files, pick the latest by version
+            isos = re.findall(r'href="(pfSense-CE-([\d.]+)-RELEASE-amd64\.iso\.gz)"', r.text)
+            if not isos:
+                return {'download_page': 'https://www.pfsense.org/download/'}
+            isos.sort(key=lambda t: tuple(map(int, t[1].split('.'))))
+            filename = isos[-1][0]
+            url = self.cdn_url + filename
+            return {'amd64': url}
+        except Exception:
+            return {'download_page': 'https://www.pfsense.org/download/'}
+
+
+class DebianFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("Debian", timeout)
+
+    def find_download_links(self) -> Dict[str, str]:
+        links = {}
+
+        try:
+            r = self.session.get(
+                "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/",
+                timeout=self.timeout,
+            )
+            if r.status_code == 200:
+                m = re.search(r'href="(debian[^"]*netinst\.iso)"', r.text)
+                if m:
+                    links['netinst'] = (
+                        f"https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/{m.group(1)}"
+                    )
+        except Exception:
+            pass
+
+        try:
+            r = self.session.get(
+                "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/",
+                timeout=self.timeout,
+            )
+            if r.status_code == 200:
+                m = re.search(r'href="(debian[^"]*DVD-1\.iso)"', r.text)
+                if m:
+                    links['dvd'] = (
+                        f"https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/{m.group(1)}"
+                    )
+        except Exception:
+            pass
+
+        verified = {}
+        for variant, url in links.items():
+            if self.verify_download_url(url):
+                verified[variant] = url
+            else:
+                verified[variant] = url  # include even if HEAD fails
+        return verified
+
+
+class TrueNASFinder(BaseOSFinder):
+    codenames = {
+        '25.04': 'Fangtooth',
+        '24.10': 'Electric-Eel',
+        '24.04': 'Dragonfish',
+    }
+
+    def __init__(self, timeout: int = 15):
+        super().__init__("TrueNAS Scale", timeout)
         self.github_api = "https://api.github.com/repos/truenas/truenas-scale/releases/latest"
         self.download_base = "https://download.sys.truenas.net/TrueNAS-SCALE-"
 
-    def _latest_from_github(self) -> Optional[str]:
-        """Get latest TrueNAS Scale version from GitHub Releases API."""
+    def find_download_links(self) -> Dict[str, str]:
+        version = None
         try:
-            r = self.session.get(self.github_api, timeout=15)
+            r = self.session.get(self.github_api, timeout=self.timeout)
             r.raise_for_status()
             tag = r.json().get('tag_name', '')
-            # Tags are like "TrueNAS-SCALE-25.04.1" or just "25.04.1"
-            version = tag.replace('TrueNAS-SCALE-', '').strip()
-            if version:
-                return version
-        except Exception as e:
-            print(f"⚠️ GitHub API unavailable for TrueNAS: {e}")
-        return None
+            version = tag.replace('TrueNAS-SCALE-', '').strip() or None
+        except Exception:
+            pass
 
-    def find_download_links(self) -> Dict[str, str]:
-        """Find TrueNAS Scale download links"""
-        print(f"🔍 Finding {self.name} download links...")
-
-        version = self._latest_from_github()
-        if version:
-            print(f"✅ Latest TrueNAS Scale version from GitHub: {version}")
-        else:
+        if not version:
             version = "25.04.1"
-            print(f"⚠️ Falling back to version {version}")
 
-        # Codename mapping (major.minor -> codename), extend as needed
-        codenames = {
-            '25.04': 'Fangtooth',
-            '24.10': 'Electric-Eel',
-            '24.04': 'Dragonfish',
-        }
         major_minor = '.'.join(version.split('.')[:2])
-        codename = codenames.get(major_minor, 'Fangtooth')
+        codename = self.codenames.get(major_minor)
+        if codename is None:
+            codename = list(self.codenames.values())[-1]
 
         url = f"{self.download_base}{codename}/{version}/TrueNAS-SCALE-{version}.iso"
-        links = {'scale': url}
-
-        verified_links = {}
-        for variant, u in links.items():
-            print(f"🔗 Checking {variant} URL...")
-            if self.verify_download_url(u):
-                verified_links[variant] = u
-                print(f"✅ {variant.capitalize()} URL verified")
-            else:
-                print(f"⚠️ {variant.capitalize()} URL not verified (but may still work)")
-                verified_links[variant] = u
-
-        return verified_links
+        return {'scale': url}
 
 
 class Windows11Finder(BaseOSFinder):
-    """Windows 11 download finder"""
-    
-    def __init__(self):
-        super().__init__("Windows 11")
-        self.download_url = "https://www.microsoft.com/software-download/windows11"
-    
+    def __init__(self, timeout: int = 15):
+        super().__init__("Windows 11", timeout)
+
     def find_download_links(self) -> Dict[str, str]:
-        """Find Windows 11 download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
-        # Windows 11 requires Microsoft's media creation tool or direct ISO access
-        links = {
-            'media_creation_tool': "https://go.microsoft.com/fwlink/?linkid=2156295",
-            'download_page': self.download_url
-        }
-        
-        print("⚠️ Windows 11 ISOs require Microsoft account or media creation tool.")
-        print("📎 Media Creation Tool and download page links provided.")
-        
-        return links
+        # Microsoft's ISO download requires JavaScript session tokens; use Mido.
+        return {'win11x64': 'mido://win11x64'}
 
 
 class ManjaroKDEFinder(BaseOSFinder):
-    """Manjaro KDE download finder"""
-    
-    def __init__(self):
-        super().__init__("Manjaro KDE")
-        self.download_url = "https://manjaro.org/downloads/"
-        self.api_url = "https://download.manjaro.org/kde/"
-    
+    def __init__(self, timeout: int = 15):
+        super().__init__("Manjaro KDE", timeout)
+        self.products_url = "https://manjaro.org/products/download/x86"
+        self.download_url = "https://manjaro.org/download/"
+
     def find_download_links(self) -> Dict[str, str]:
-        """Find Manjaro KDE download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
         try:
-            # Try the direct download directory
-            response = self.session.get(self.api_url, timeout=15)
-            response.raise_for_status()
-            content = response.text
-            
-            links = {}
-            
-            # Look for latest version directory
-            version_pattern = r'href="(\d+\.\d+\.\d+)/"'
-            versions = re.findall(version_pattern, content)
-            
-            if versions:
-                # Sort versions and get latest
-                versions.sort(key=lambda x: tuple(map(int, x.split('.'))))
-                latest_version = versions[-1]
-                
-                # Check the latest version directory for ISO
-                version_url = f"{self.api_url}{latest_version}/"
-                try:
-                    version_response = self.session.get(version_url, timeout=10)
-                    if version_response.status_code == 200:
-                        version_content = version_response.text
-                        iso_pattern = r'href="(manjaro[^"]*\.iso)"'
-                        iso_match = re.search(iso_pattern, version_content, re.IGNORECASE)
-                        if iso_match:
-                            links['kde'] = urljoin(version_url, iso_match.group(1))
-                except Exception:
-                    pass
-            
-            # Manual fallback
-            if not links:
-                print("🔧 Using manual Manjaro KDE pattern...")
-                links['download_page'] = self.download_url
-                print("⚠️ Please visit the Manjaro downloads page for latest ISO.")
-            
-            verified_links = {}
-            for variant, url in links.items():
-                if url.endswith('.iso'):
-                    print(f"🔗 Checking {variant} URL...")
-                    if self.verify_download_url(url):
-                        verified_links[variant] = url
-                        print(f"✅ {variant.capitalize()} URL verified")
-                    else:
-                        print(f"⚠️ {variant.capitalize()} URL not verified (but may still work)")
-                        verified_links[variant] = url
-                else:
-                    verified_links[variant] = url
-            
-            return verified_links
-            
-        except Exception as e:
-            print(f"❌ Error finding Manjaro KDE links: {e}")
+            r = self.session.get(self.products_url, timeout=self.timeout)
+            r.raise_for_status()
+            m = re.search(r'href="(https://download\.manjaro\.org/kde/[^"]+\.iso)"', r.text)
+            if m:
+                return {'kde': m.group(1)}
             return {'download_page': self.download_url}
+        except Exception:
+            return {'download_page': self.download_url}
+
+
+class MXLinuxFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("MX Linux", timeout)
+        self.downloads_page = "https://mxlinux.org/download-links/"
+        self.sf_base = "https://sourceforge.net/projects/mx-linux/files/Final/"
+
+    def find_download_links(self) -> Dict[str, str]:
+        # 1. Parse MX Linux official downloads page for SourceForge links
+        try:
+            r = self.session.get(self.downloads_page, timeout=self.timeout)
+            if r.status_code == 200:
+                links = re.findall(
+                    r'https://sourceforge\.net/projects/mx-linux/files/'
+                    r'(Final/MX-[\d.]+/MX-[\d.]+_x64\.iso)/download',
+                    r.text,
+                )
+                xfce = [l for l in links if 'KDE' not in l and 'fluxbox' not in l.lower()]
+                chosen = xfce[0] if xfce else (links[0] if links else None)
+                if chosen:
+                    return {'xfce-x64': f"https://downloads.sourceforge.net/project/mx-linux/{chosen}"}
+        except Exception:
+            pass
+
+        # 2. Fallback: scrape SourceForge file listing
+        try:
+            r = self.session.get(self.sf_base, timeout=self.timeout)
+            if r.status_code == 200:
+                versions = re.findall(r'title="(MX-[\d.]+)"', r.text)
+                if versions:
+                    versions.sort(key=lambda v: tuple(int(x) for x in re.findall(r'\d+', v)))
+                    latest = versions[-1]
+                    r2 = self.session.get(f"{self.sf_base}{latest}/", timeout=self.timeout)
+                    if r2.status_code == 200:
+                        isos = re.findall(r'title="(MX-[\d.]+_x64\.iso)"', r2.text)
+                        xfce = [i for i in isos if 'KDE' not in i and 'fluxbox' not in i.lower()]
+                        iso = xfce[0] if xfce else (isos[0] if isos else None)
+                        if iso:
+                            return {'xfce-x64': f"https://downloads.sourceforge.net/project/mx-linux/Final/{latest}/{iso}"}
+        except Exception:
+            pass
+
+        return {'download_page': self.downloads_page}
 
 
 class PuppyLinuxFinder(BaseOSFinder):
-    """Puppy Linux download finder"""
-    
-    def __init__(self):
-        super().__init__("Puppy Linux")
-        self.download_url = "http://puppylinux-woof-ce.github.io/woof-CE/index.html#downloads"
+    # SourceForge projects to try before falling back to ibiblio (CDN-backed = much faster)
+    SF_PROJECTS = [
+        ('fossapup64', 'fossapup'),
+        ('bionicpup64', 'bionicpup'),
+    ]
+    VARIANT_DIRS = ['puppy-trixie', 'puppy-bookwormpup', 'puppy-fossa', 'puppy-bionic']
+
+    def __init__(self, timeout: int = 15):
+        super().__init__("Puppy Linux", timeout)
         self.distro_url = "http://distro.ibiblio.org/puppylinux/"
-    
+        self.download_url = "http://puppylinux-woof-ce.github.io/woof-CE/index.html#downloads"
+
+    def _try_sourceforge(self) -> Optional[Tuple[str, str]]:
+        for project, variant in self.SF_PROJECTS:
+            try:
+                r = self.session.get(
+                    f"https://sourceforge.net/projects/{project}/files/",
+                    timeout=self.timeout,
+                )
+                if r.status_code != 200:
+                    continue
+                # Look for version subdirectories (e.g. title="9.5")
+                subdirs = re.findall(r'title="([\d.]+)"', r.text)
+                if subdirs:
+                    subdirs.sort(key=lambda v: tuple(int(x) for x in re.findall(r'\d+', v) or ['0']))
+                    latest = subdirs[-1]
+                    r2 = self.session.get(
+                        f"https://sourceforge.net/projects/{project}/files/{latest}/",
+                        timeout=self.timeout,
+                    )
+                    if r2.status_code == 200:
+                        isos = re.findall(r'title="([\w.-]+\.iso)"', r2.text, re.IGNORECASE)
+                        if isos:
+                            iso = next((i for i in isos if '64' in i), isos[0])
+                            url = f"https://downloads.sourceforge.net/project/{project}/{latest}/{iso}"
+                            return variant, url
+                # ISOs might be at root level
+                isos = re.findall(r'title="([\w.-]+\.iso)"', r.text, re.IGNORECASE)
+                if isos:
+                    iso = next((i for i in isos if '64' in i), isos[0])
+                    url = f"https://downloads.sourceforge.net/project/{project}/{iso}"
+                    return variant, url
+            except Exception:
+                continue
+        return None
+
     def find_download_links(self) -> Dict[str, str]:
-        """Find Puppy Linux download links"""
-        print(f"🔍 Finding {self.name} download links...")
-        
+        sf = self._try_sourceforge()
+        if sf:
+            variant, url = sf
+            return {variant: url}
+
+        for dirname in self.VARIANT_DIRS:
+            dir_url = f"{self.distro_url}{dirname}/"
+            try:
+                r = self.session.get(dir_url, timeout=self.timeout)
+                if r.status_code != 200:
+                    continue
+                isos = re.findall(r'href="([^"]*\.iso)"', r.text, re.IGNORECASE)
+                if not isos:
+                    continue
+                iso = next((i for i in isos if '64' in i), isos[0])
+                url = urljoin(dir_url, iso)
+                return {dirname.replace('puppy-', ''): url}
+            except Exception:
+                continue
+
+        return {'download_page': self.download_url}
+
+
+class CachyOSFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("CachyOS", timeout)
+        self.mirror_base = "https://mirror.cachyos.org/ISO/desktop/"
+
+    def find_download_links(self) -> Dict[str, str]:
         try:
-            # Try to scrape the ibiblio mirror
-            response = self.session.get(self.distro_url, timeout=15)
-            response.raise_for_status()
-            content = response.text
-            
-            links = {}
-            
-            # Look for recent puppy directories
-            dir_pattern = r'href="(puppy[^"/]*/)"|href="([^"/]*puppy[^"/]*/)"'
-            matches = re.findall(dir_pattern, content, re.IGNORECASE)
-            
-            puppy_dirs = []
-            for match in matches:
-                dirname = match[0] if match[0] else match[1]
-                if dirname and 'puppy' in dirname.lower():
-                    puppy_dirs.append(dirname)
-            
-            if puppy_dirs:
-                # Try the first few directories for ISO files
-                for dirname in puppy_dirs[:3]:
-                    try:
-                        dir_url = urljoin(self.distro_url, dirname)
-                        dir_response = self.session.get(dir_url, timeout=10)
-                        if dir_response.status_code == 200:
-                            dir_content = dir_response.text
-                            iso_pattern = r'href="([^"]*\.iso)"'
-                            iso_matches = re.findall(iso_pattern, dir_content, re.IGNORECASE)
-                            if iso_matches:
-                                # Take the first ISO found
-                                links[dirname.strip('/')] = urljoin(dir_url, iso_matches[0])
-                                break
-                    except Exception:
-                        continue
-            
-            # Manual fallback
-            if not links:
-                print("🔧 Using Puppy Linux download page...")
-                links['download_page'] = self.download_url
-                print("⚠️ Please visit the Puppy Linux page for latest ISO.")
-            
-            verified_links = {}
-            for variant, url in links.items():
-                if url.endswith('.iso'):
-                    print(f"🔗 Checking {variant} URL...")
-                    if self.verify_download_url(url):
-                        verified_links[variant] = url
-                        print(f"✅ {variant.capitalize()} URL verified")
-                    else:
-                        print(f"⚠️ {variant.capitalize()} URL not verified (but may still work)")
-                        verified_links[variant] = url
-                else:
-                    verified_links[variant] = url
-            
-            return verified_links
-            
-        except Exception as e:
-            print(f"❌ Error finding Puppy Linux links: {e}")
-            return {'download_page': self.download_url}
+            r = self.session.get(self.mirror_base, timeout=self.timeout)
+            r.raise_for_status()
+            versions = re.findall(r'href="(\d{6})/"', r.text)
+            if not versions:
+                return {'download_page': 'https://cachyos.org/download/'}
+
+            versions.sort()
+            version_url = f"{self.mirror_base}{versions[-1]}/"
+            r = self.session.get(version_url, timeout=self.timeout)
+            m = re.search(r'href="(cachyos-desktop-linux-[^"]+\.iso)"', r.text)
+            if not m:
+                return {'download_page': 'https://cachyos.org/download/'}
+
+            return {'desktop': version_url + m.group(1)}
+        except Exception:
+            return {'download_page': 'https://cachyos.org/download/'}
 
 
-def _prompt_override_url(os_name: str, session: requests.Session) -> Optional[str]:
-    """Interactively ask the user for a manual download URL."""
-    print(f"\n💬 No valid ISO URL found for {os_name}.")
+def _prompt_override_url(os_name: str) -> Optional[str]:
+    console.print(f"\n[yellow]💬 No direct ISO found for {os_name}.[/]")
     try:
         url = input("   Enter an override URL (or press Enter to skip): ").strip()
     except (EOFError, KeyboardInterrupt):
@@ -574,166 +475,250 @@ def _prompt_override_url(os_name: str, session: requests.Session) -> Optional[st
         return None
 
     if not url.startswith(("http://", "https://")):
-        print("   ⚠️ URL must start with http:// or https:// — skipping.")
+        console.print("   [red]⚠ URL must start with http:// or https:// — skipping.[/]")
         return None
 
-    print(f"   🔗 Verifying override URL...")
     try:
-        r = session.head(url, timeout=10, allow_redirects=True)
+        r = _session.head(url, timeout=10, allow_redirects=True)
         if r.status_code == 200:
-            print(f"   ✅ Override URL verified.")
+            console.print("   [green]✓ URL verified.[/]")
         else:
-            print(f"   ⚠️ Server returned {r.status_code} — URL may still work.")
+            console.print(f"   [yellow]⚠ Server returned {r.status_code} — may still work.[/]")
     except Exception as e:
-        print(f"   ⚠️ Could not verify URL: {e}")
-
+        console.print(f"   [yellow]⚠ Could not verify: {e}[/]")
     return url
 
 
 def _has_iso_link(links: Dict[str, str]) -> bool:
-    """Return True if at least one link is a direct ISO (not just a download page)."""
     return any(
         url.lower().endswith(".iso") or url.lower().endswith(".iso.bz2")
+        or url.lower().endswith(".iso.gz") or url.startswith("mido://")
         for url in links.values()
     )
 
 
-class MultiOSDownloadFinder:
-    """Main class for finding download links for multiple operating systems"""
+def _run_finder(finder: BaseOSFinder):
+    """Run a finder, suppressing its stdout. Returns (links, captured_output)."""
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            links = finder.find_download_links()
+    except Exception as e:
+        buf.write(f"Error: {e}\n")
+        links = {}
+    return links, buf.getvalue()
 
-    def __init__(self):
+
+class MultiOSDownloadFinder:
+    def __init__(self, timeout: int = 15):
         self.finders = {
-            'ubuntu': UbuntuLTSFinder(),
-            'opensense': OpenSenseFinder(),
-            'pfsense': PfSenseFinder(),
-            'debian': DebianFinder(),
-            'truenas': TrueNASFinder(),
-            'windows11': Windows11Finder(),
-            'manjaro': ManjaroKDEFinder(),
-            'puppy': PuppyLinuxFinder()
+            'ubuntu': UbuntuFinder(timeout),
+            'opnsense': OPNsenseFinder(timeout),
+            'pfsense': PfSenseFinder(timeout),
+            'debian': DebianFinder(timeout),
+            'truenas': TrueNASFinder(timeout),
+            'windows11': Windows11Finder(timeout),
+            'manjaro': ManjaroKDEFinder(timeout),
+            'mxlinux': MXLinuxFinder(timeout),
+            'puppy': PuppyLinuxFinder(timeout),
+            'cachyos': CachyOSFinder(timeout),
         }
 
-    def find_all_links(self, os_list: List[str] = None, interactive: bool = True) -> Dict[str, Dict[str, str]]:
-        """Find download links for specified operating systems."""
-        if os_list is None:
-            os_list = list(self.finders.keys())
+    def find_all_links(
+        self,
+        os_list: List[str] = None,
+        interactive: bool = True,
+        quiet: bool = False,
+    ) -> Dict[str, Dict[str, str]]:
+        valid = [n for n in (os_list or list(self.finders)) if n in self.finders]
+        for name in (os_list or []):
+            if name not in self.finders:
+                console.print(f"[yellow]⚠ Unknown OS: {name}[/]")
 
-        all_links = {}
+        results: Dict[str, Dict[str, str]] = {}
 
-        for os_name in os_list:
-            if os_name not in self.finders:
-                print(f"⚠️ Unknown OS: {os_name}")
-                continue
+        if quiet:
+            with ThreadPoolExecutor(max_workers=len(valid)) as executor:
+                futures = {executor.submit(_run_finder, self.finders[n]): n for n in valid}
+                for future in as_completed(futures):
+                    links, _ = future.result()
+                    results[futures[future]] = links
+        else:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold cyan]{task.description:<20}"),
+                TextColumn("{task.fields[status]}"),
+                TimeElapsedColumn(),
+                console=console,
+                transient=False,
+            ) as progress:
+                task_ids = {
+                    name: progress.add_task(
+                        self.finders[name].name,
+                        status="[dim]searching...[/dim]",
+                        total=None,
+                    )
+                    for name in valid
+                }
 
-            print(f"\n{'='*50}")
-            print(f"Processing: {self.finders[os_name].name}")
-            print(f"{'='*50}")
+                try:
+                    with ThreadPoolExecutor(max_workers=len(valid)) as executor:
+                        futures = {executor.submit(_run_finder, self.finders[n]): n for n in valid}
+                        for future in as_completed(futures):
+                            name = futures[future]
+                            links, _ = future.result()
+                            results[name] = links
+                            logger.info("FINDER  %-14s  links=%d  %s",
+                                        name, len(links), list(links.keys()))
 
-            try:
-                links = self.finders[os_name].find_download_links()
-            except Exception as e:
-                print(f"❌ Error processing {self.finders[os_name].name}: {e}")
-                links = {}
+                            if links:
+                                variants = ", ".join(links.keys())
+                                status = f"[green]✓ {variants}[/green]"
+                            else:
+                                status = "[red]✗ not found[/red]"
 
-            # Offer override if no direct ISO link was found
+                            progress.update(task_ids[name], status=status, completed=1, total=1)
+                except KeyboardInterrupt:
+                    console.print("\n[yellow]⏸  Interrupted — returning partial results.[/]")
+                    logger.warning("FINDER INTERRUPTED by user")
+
+        # Offer interactive overrides after the progress display closes
+        all_links: Dict[str, Dict[str, str]] = {}
+        for name in valid:
+            links = results.get(name, {})
             if interactive and not _has_iso_link(links):
-                override = _prompt_override_url(self.finders[os_name].name, _session)
+                override = _prompt_override_url(self.finders[name].name)
                 if override:
                     links['override'] = override
-
             if links:
-                all_links[os_name] = links
-                print(f"✅ Found {len(links)} link(s) for {self.finders[os_name].name}")
-            else:
-                print(f"❌ No links found for {self.finders[os_name].name}")
+                all_links[name] = links
 
         return all_links
-    
-    def save_links_to_files(self, all_links: Dict[str, Dict[str, str]]):
-        """Save download links to files"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # Save comprehensive file
-        try:
-            with open('all_os_links.txt', 'w') as f:
-                f.write(f"# Multi-OS Download Links\n")
-                f.write(f"# Generated on: {timestamp}\n\n")
-                
-                for os_name, links in all_links.items():
-                    f.write(f"# {self.finders[os_name].name}\n")
-                    for variant, url in links.items():
-                        f.write(f"# {variant.capitalize()}: {url}\n")
-                    f.write("\n")
-            
-            print(f"💾 All links saved to: all_os_links.txt")
-        except Exception as e:
-            print(f"❌ Error saving comprehensive file: {e}")
-        
-        # Save Go-compatible file
-        try:
-            import os
-            os.makedirs("./os-links", exist_ok=True)
-            
-            with open('./os-links/all_os.txt', 'w') as f:
-                for os_name, links in all_links.items():
-                    for variant, url in links.items():
-                        if url.endswith('.iso') or 'iso' in url:
-                            f.write(f"{url}\n")
-            
-            print(f"💾 ISO links saved to: ./os-links/all_os.txt")
-            print("   (Compatible with the Python download manager)")
-        except Exception as e:
-            print(f"❌ Error saving Go-compatible file: {e}")
+
+    def save_links_to_file(self, all_links: Dict[str, Dict[str, str]], output_path: str = './os-links/all_os.txt'):
+        os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+        with open(output_path, 'w') as f:
+            for links in all_links.values():
+                for url in links.values():
+                    if (url.lower().endswith('.iso')
+                            or url.lower().endswith('.iso.bz2')
+                            or url.lower().endswith('.iso.gz')
+                            or url.startswith('mido://')):
+                        f.write(f"{url}\n")
+        console.print(f"[green]💾 ISO links saved to:[/] {output_path}")
+
+
+_ISO_EXTS = ('.iso', '.iso.bz2', '.iso.gz')
+
+
+def _url_kind(url: str) -> Tuple[str, str]:
+    """Returns (label, rich_color) for a URL."""
+    if url.startswith("mido://"):
+        return "Mido", "blue"
+    lo = url.lower()
+    if any(lo.endswith(e) for e in _ISO_EXTS):
+        return "ISO", "green"
+    return "link", "yellow"
+
+
+def _print_summary(finder: 'MultiOSDownloadFinder', all_links: Dict[str, Dict[str, str]]):
+    table = Table(
+        title="[bold]Resolved Links[/]",
+        box=rich_box.ROUNDED,
+        show_lines=True,
+        title_justify="left",
+        header_style="bold dim",
+        border_style="dim",
+    )
+    table.add_column("OS", style="bold cyan", no_wrap=True, min_width=14)
+    table.add_column("Variant", style="dim", no_wrap=True)
+    table.add_column("Type", no_wrap=True, min_width=6)
+    table.add_column("URL")
+
+    iso_count = 0
+    for os_name, links in all_links.items():
+        display_name = finder.finders[os_name].name
+        for i, (variant, url) in enumerate(links.items()):
+            kind, color = _url_kind(url)
+            if kind == "ISO":
+                iso_count += 1
+            table.add_row(
+                display_name if i == 0 else "",
+                variant,
+                f"[{color}]{kind}[/]",
+                f"[{color}]{url}[/]",
+            )
+
+    console.print(table)
+    n = len(all_links)
+    console.print(
+        f"  [dim]{n} OS{'es' if n != 1 else ''} resolved  ·  "
+        f"[green]{iso_count} ISO link{'s' if iso_count != 1 else ''} ready to download[/dim]"
+    )
 
 
 def main():
-    """Main function"""
     parser = argparse.ArgumentParser(description='Multi-OS Download Link Finder')
-    parser.add_argument('--os', nargs='+',
-                        choices=['ubuntu', 'opensense', 'pfsense', 'debian', 'truenas', 'windows11', 'manjaro', 'puppy', 'all'],
-                        default=['all'],
-                        help='Operating systems to find download links for')
+    parser.add_argument(
+        '--os', nargs='+',
+        choices=['ubuntu', 'opnsense', 'pfsense', 'debian', 'truenas',
+                 'windows11', 'manjaro', 'mxlinux', 'puppy', 'cachyos', 'all'],
+        default=['all'],
+        help='Operating systems to find download links for',
+    )
     parser.add_argument('--no-interactive', action='store_true',
                         help='Disable the override URL prompt when a link cannot be found')
-
+    parser.add_argument('--output', default='./os-links/all_os.txt',
+                        help='Output file for ISO URLs (default: ./os-links/all_os.txt)')
+    parser.add_argument('--timeout', type=int, default=15,
+                        help='HTTP request timeout in seconds (default: 15)')
+    parser.add_argument('--json', action='store_true',
+                        help='Output results as JSON and suppress progress messages')
+    parser.add_argument('--log', metavar='FILE', default='./logs/os-finder.log',
+                        help='Write log to FILE (default: ./logs/os-finder.log)')
     args = parser.parse_args()
-    
-    print("Multi-OS Download Link Finder")
-    print("=" * 60)
-    print("Supported OS: Ubuntu LTS, OpenSense, pfSense, Debian, TrueNAS Scale,")
-    print("              Windows 11, Manjaro KDE, Puppy Linux")
-    print("=" * 60)
-    
-    finder = MultiOSDownloadFinder()
-    
-    # Determine which OSes to process
-    if 'all' in args.os:
-        os_list = list(finder.finders.keys())
-    else:
-        os_list = args.os
-    
-    print(f"🎯 Processing: {', '.join(os_list)}")
-    
-    # Find all links
+
+    setup_logging(args.log)
+
+    finder = MultiOSDownloadFinder(timeout=args.timeout)
+    os_list = list(finder.finders.keys()) if 'all' in args.os else args.os
+
+    if args.json:
+        all_links = finder.find_all_links(os_list, interactive=False, quiet=True)
+        print(json.dumps(all_links, indent=2))
+        return
+
+    os_display = "  ·  ".join(finder.finders[k].name for k in os_list)
+    console.print(Panel(
+        f"[bold]Multi-OS Download Link Finder[/]\n[dim]{os_display}[/]",
+        expand=False,
+    ))
+
     all_links = finder.find_all_links(os_list, interactive=not args.no_interactive)
-    
+
     if all_links:
-        print(f"\n🎉 SUMMARY - Found links for {len(all_links)} operating system(s):")
-        print("-" * 60)
-        
-        for os_name, links in all_links.items():
-            print(f"\n{finder.finders[os_name].name}:")
-            for variant, url in links.items():
-                print(f"  {variant}: {url}")
-        
-        # Save to files
-        print("\n" + "="*60)
-        finder.save_links_to_files(all_links)
-        
+        console.print()
+        _print_summary(finder, all_links)
+        console.print()
+        finder.save_links_to_file(all_links, output_path=args.output)
+
+        iso_count = sum(
+            1 for links in all_links.values()
+            for url in links.values()
+            if any(url.lower().endswith(e) for e in _ISO_EXTS)
+        )
+        console.print(Panel(
+            f"  [green]✓[/]  [bold]{iso_count} ISO URL{'s' if iso_count != 1 else ''}[/] "
+            f"saved to [cyan]{args.output}[/]\n"
+            f"  Run [bold cyan]uv run os-download[/] to start downloading",
+            title="[bold green]Ready[/]",
+            border_style="green",
+            expand=False,
+        ))
     else:
-        print("❌ No download links found for any operating system")
+        console.print("[red]✗ No download links found for any operating system[/]")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    main() 
+    main()

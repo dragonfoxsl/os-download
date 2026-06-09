@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "requests>=2.25.0",
+    "rich>=13.0.0",
 ]
 
 [project.scripts]

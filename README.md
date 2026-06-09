@@ -1,56 +1,44 @@
-# OS Download Tool (Python)
+<p align="center">
+  <img src="assets/logo.svg" alt="os-download" width="520"/>
+</p>
 
-A comprehensive Python-based tool for finding and downloading operating system ISO files. This tool consists of two main components:
+<br>
 
-1. **OS Download Finder** - Automatically finds download links for various operating systems
-2. **Download Manager** - Downloads files with progress tracking and resume support
+**os-download** is a two-command Python CLI that finds the latest download URL for every major OS ISO and pulls them to disk with resume support, parallel downloads, and checksum verification.
 
-## Supported Operating Systems
+```bash
+uv run os-finder          # resolve latest ISO URLs for all supported OSes
+uv run os-download        # download everything that was found
+```
 
-| OS | Variants | Auto-Detection | Verification |
-| --- | --- | --- | --- |
-| **Ubuntu LTS** | Desktop, Server | Yes | Yes |
-| **OPNsense** | AMD64 | Yes | Yes |
-| **pfSense** | All variants | Partial | Download page |
-| **Debian** | NetInst, DVD | Yes | Yes |
-| **TrueNAS Scale** | Latest | Yes | Yes |
-| **Windows 11** | Media Tool | Partial | Official links |
-| **Manjaro KDE** | Latest | Partial | Download page |
-| **Puppy Linux** | Various | Yes | Yes |
+---
 
-## Features
+## Supported operating systems
 
-### OS Finder (`os_download_finder.py`)
+| OS | Source | Auto-version | Format | Checksum |
+|---|---|---|---|---|
+| **Ubuntu** | Launchpad API + releases.ubuntu.com | Yes (LTS + latest) | `.iso` | `SHA256SUMS` |
+| **OPNsense** | pkg.opnsense.org | Yes | `.iso.bz2` (auto-extracted) | |
+| **pfSense CE** | Netgate CDN | Yes | `.iso.gz` (auto-extracted) | `.sha256` |
+| **Debian** | cdimage.debian.org | Yes | `.iso` | |
+| **TrueNAS Scale** | GitHub Releases API | Yes | `.iso` | |
+| **Windows 11** | [Mido](https://github.com/ElliotKillick/Mido) | Yes | `.iso` | |
+| **Manjaro KDE** | manjaro.org/products | Yes | `.iso` | |
+| **MX Linux** | mxlinux.org / SourceForge | Yes (Xfce x64) | `.iso` | |
+| **Puppy Linux** | SourceForge CDN → ibiblio fallback | Yes (fossapup64) | `.iso` | |
+| **CachyOS** | mirror.cachyos.org | Yes | `.iso` | `.sha256` |
 
-- **Auto-detection**: Latest version finding for each OS via APIs and web scraping
-- **Multiple sources**: APIs, web scraping, fallback methods
-- **URL verification**: Checks if links are accessible before saving
-- **Selective processing**: Choose specific OS or get all
-- **Smart file output**: Download-ready URL list
+> **Windows 11** — Microsoft's ISO download requires a JavaScript session-token flow that cannot be replicated with plain HTTP. os-download delegates this to [Mido](https://github.com/ElliotKillick/Mido), which is cloned automatically on first use.
 
-### Download Manager (`download_manager.py`)
-
-- **Progress tracking**: Real-time speed, percentage, ETA
-- **Resume support**: Continue interrupted downloads via HTTP Range headers
-- **Error handling**: Graceful failure recovery
-- **File management**: Automatic filename detection from URL
-- **Configurable**: Chunk size, directories, resume options
+---
 
 ## Installation
 
-### Requirements
-
-- Python 3.9+
-- [uv](https://docs.astral.sh/uv/) — fast Python package manager
-
-### Setup
+Requires **Python 3.9+** and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# Install uv (Linux/macOS)
+# Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install uv (Windows PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # Clone and install
 git clone https://github.com/dragonfoxsl/os-download
@@ -58,265 +46,165 @@ cd os-download
 uv sync
 ```
 
+---
+
 ## Usage
 
-### Step 1: Find OS Download Links
+### Step 1: Find ISO URLs
 
 ```bash
-# Find all supported operating systems
+# All supported OSes (runs in parallel)
 uv run os-finder
 
-# Find specific operating systems
-uv run os-finder --os ubuntu debian manjaro
+# Specific OSes
+uv run os-finder --os ubuntu debian cachyos mxlinux
 
-# Find just Ubuntu LTS
-uv run os-finder --os ubuntu
+# Save URLs to a custom path
+uv run os-finder --output ~/isos/urls.txt
 
-# Find firewall OSes
-uv run os-finder --os opensense pfsense
+# Increase timeout for slow connections
+uv run os-finder --timeout 30
+
+# Machine-readable JSON output
+uv run os-finder --json
 ```
 
-### Step 2: Download Files
+### Step 2: Download
 
 ```bash
-# Download all found URLs
+# Download everything found
 uv run os-download
 
-# Download from specific file
-uv run os-download --file ./os-links/all_os.txt
+# Three simultaneous downloads
+uv run os-download --parallel 3
 
-# Download single URL
+# Download and verify checksums
+uv run os-download --verify
+
+# Download to a specific directory
+uv run os-download --dir /mnt/nas/isos
+
+# Single URL
 uv run os-download --url "https://example.com/file.iso"
 
-# Download to specific directory
-uv run os-download --dir ./my_downloads
-
-# Disable resume functionality
-uv run os-download --no-resume
+# Skip automatic decompression of .bz2 / .gz files
+uv run os-download --no-decompress
 ```
 
-## Command Reference
+### Keyboard shortcuts (download dashboard)
 
-### OS Finder Options
+| Key | Action |
+|---|---|
+| `q` | Quit cleanly — partial files are saved and can be resumed |
+| `Ctrl+C` | Interrupt — same as `q`, partial files resume automatically |
 
-```text
-uv run os-finder [OPTIONS]
+---
 
-Options:
-  --os {ubuntu,opensense,pfsense,debian,truenas,windows11,manjaro,puppy,all}
-      Operating systems to find (default: all)
+## Download dashboard
+
+When downloading multiple files, os-download shows a live dashboard:
+
+- **Header** — active / done / failed counts, total data downloaded, speed sparkline, elapsed time
+- **Files** — one progress bar per file with size, speed, and ETA
+- **Footer** — keyboard shortcuts and current session settings
+
+On completion the dashboard transitions to a summary panel showing files downloaded, total data, time taken, and any failures. If downloads fail you are prompted to retry them; the retry runs only the failed files.
+
+At startup, if partial files are detected you are prompted to resume or start from scratch. Files downloaded within the last 24 hours are listed and can be skipped.
+
+---
+
+## All flags
+
+**`os-finder`**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--os` | `all` | Space-separated list: `ubuntu opnsense pfsense debian truenas windows11 manjaro mxlinux puppy cachyos` |
+| `--output` | `./os-links/all_os.txt` | Output file for resolved ISO URLs |
+| `--timeout` | `15` | HTTP timeout in seconds |
+| `--no-interactive` | off | Skip manual override prompt when a URL cannot be found |
+| `--json` | off | Print JSON to stdout, suppress progress display |
+| `--log` | `./logs/os-finder.log` | Log file path |
+
+**`os-download`**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--file` / `-f` | `./os-links/all_os.txt` | URL list file |
+| `--url` / `-u` | | Download a single URL |
+| `--dir` / `-d` | `~/Downloads/os-isos` | Output directory |
+| `--parallel` | `1` | Simultaneous downloads |
+| `--verify` | off | SHA256 checksum verification after each download |
+| `--no-decompress` | off | Keep `.bz2` / `.gz` files compressed |
+| `--no-resume` | off | Start downloads from the beginning even if partial file exists |
+| `--no-interactive` | off | Fail fast on error without prompting to continue |
+| `--chunk-size` | `8192` | Download chunk size in bytes |
+| `--log` | `./logs/os-download.log` | Log file path |
+
+---
+
+## How it works
+
+```
+os-finder                          os-download
+─────────────────────────────      ─────────────────────────────
+MultiOSDownloadFinder              DownloadManager
+  └─ runs all finders in             └─ reads ./os-links/all_os.txt
+     parallel via                       runs downloads in parallel
+     ThreadPoolExecutor                 via ThreadPoolExecutor
+
+Each finder (BaseOSFinder          Each download
+subclass) is independent:            • streams in chunks
+  • scrapes its source               • resumes via Range header
+  • verifies the URL                 • decompresses .bz2/.gz
+  • returns {variant: url}           • verifies SHA256 if --verify
+                                     • mido:// URIs delegated to Mido
 ```
 
-### Download Manager Options
+### Adding a new OS
 
-```text
-uv run os-download [OPTIONS]
-
-Options:
-  -f, --file FILE       File with URLs (default: ./os-links/all_os.txt)
-  -u, --url URL         Single URL to download
-  -o, --output OUTPUT   Output filename (for single URL)
-  -d, --dir DIR         Download directory (default: ./downloads)
-  --no-resume           Disable resume functionality
-  --chunk-size SIZE     Download chunk size in bytes (default: 8192)
-```
-
-## File Structure
-
-After running both tools, your directory will look like:
-
-```text
-os-download/
-├── os_download_finder.py   # OS link finder
-├── download_manager.py     # Download manager
-├── pyproject.toml          # uv project config & dependencies
-├── uv.lock                 # Locked dependency versions
-├── README.md               # This file
-├── os-links/
-│   └── all_os.txt          # Download-ready URLs
-└── downloads/              # Downloaded ISO files
-    ├── ubuntu-24.04.4-desktop-amd64.iso
-    ├── debian-13.3.0-amd64-netinst.iso
-    └── ...
-```
-
-## Typical Workflow
-
-### Quick Start (All OS)
-
-```bash
-# 1. Find all OS download links
-uv run os-finder
-
-# 2. Download all found ISOs
-uv run os-download
-```
-
-### Selective Download
-
-```bash
-# 1. Find specific OS links
-uv run os-finder --os ubuntu debian
-
-# 2. Download only those
-uv run os-download --file ./os-links/all_os.txt
-```
-
-### Single File Download
-
-```bash
-uv run os-download --url "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso"
-```
-
-## Sample Output
-
-### OS Finder Output
-
-```text
-Multi-OS Download Link Finder
-============================================================
-Processing: ubuntu, debian
-
-Processing: Ubuntu LTS
-Finding Ubuntu LTS download links...
-Found latest LTS from API: 24.04
-Desktop URL verified
-Found 2 link(s) for Ubuntu LTS
-
-SUMMARY - Found links for 2 operating system(s):
-Ubuntu LTS:
-  desktop: http://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso
-  server: http://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso
-```
-
-### Download Manager Output
-
-```text
-Python Download Manager
-==================================================
-Reading URLs from: os-links/all_os.txt
-Found 7 URL(s) to download
-
-Downloading: http://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso
-Save as: downloads/ubuntu-24.04.4-desktop-amd64.iso
-Total size: 5.9GB
-203.3MB / 5.9GB (3.4%) | Speed: 11.0MB/s | ETA: 9m 53s
-```
-
-## Advanced Features
-
-### Resume Downloads
-
-The download manager automatically resumes interrupted downloads:
-
-```bash
-# If download was interrupted, simply run again
-uv run os-download
-# It will automatically resume from where it left off
-```
-
-### Custom Download Directory
-
-```bash
-uv run os-download --dir /path/to/my/isos
-```
-
-### Performance Tuning
-
-```bash
-# Increase chunk size for faster downloads on good connections
-uv run os-download --chunk-size 65536
-
-# Decrease for slower/unstable connections
-uv run os-download --chunk-size 4096
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### "No URL files found"
-
-- Run the OS finder first: `uv run os-finder`
-- Check that `./os-links/all_os.txt` exists
-
-#### Downloads are slow
-
-- Try increasing chunk size: `--chunk-size 65536`
-- Check your internet connection
-- Some servers may have rate limiting
-
-#### Resume not working
-
-- Some servers don't support resume
-- The tool will automatically restart from beginning
-- Use `--no-resume` to force fresh downloads
-
-#### URL verification fails
-
-- URLs may still work even if verification fails
-- Some servers don't respond to HEAD requests
-- The finder includes unverified URLs with warnings
-
-### OS-Specific Notes
-
-- **pfSense**: Requires registration, provides download page
-- **Windows 11**: Microsoft restrictions, provides official tools
-- **TrueNAS**: May require form submission
-- **Manjaro**: Download structure changes frequently
-
-## Migration from Go Version
-
-If you previously used the Go version of this tool:
-
-### What Changed
-
-- **Go removed**: No more `go run main.go`
-- **Pure Python + uv**: Single language, easier to maintain
-- **Better resume**: More robust resume functionality
-- **More OS support**: Added 7 new operating systems
-- **Better progress**: Enhanced progress tracking
-
-### Migration Steps
-
-1. Remove old Go files (done automatically)
-2. Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-3. Install dependencies: `uv sync`
-4. Use new commands:
-   - Old: `go run main.go`
-   - New: `uv run os-download`
-
-## Performance
-
-### Download Speeds
-
-- Typical: 5-15 MB/s (depends on server and connection)
-- Large files: Resume support prevents starting over
-- Progress updates: Every 2 seconds (non-blocking)
-
-### Memory Usage
-
-- Low memory footprint
-- Streaming downloads (doesn't load entire file into memory)
-- Configurable chunk sizes for optimization
-
-## Contributing
-
-To add a new operating system:
-
-1. Create a new finder class in `os_download_finder.py`:
+1. Subclass `BaseOSFinder` in `os_download_finder.py`:
 
 ```python
-class NewOSFinder(BaseOSFinder):
+class MyOSFinder(BaseOSFinder):
+    def __init__(self, timeout: int = 15):
+        super().__init__("My OS", timeout)
+
     def find_download_links(self) -> Dict[str, str]:
-        # Implementation here
-        return {'variant': 'download_url'}
+        # fetch, scrape, return {variant: url}
+        return {'amd64': 'https://...'}
 ```
 
-1. Add to the finder registry in `MultiOSDownloadFinder`
-2. Update the argument parser choices
-3. Test and submit a pull request
+2. Register it in `MultiOSDownloadFinder.__init__`:
+
+```python
+'myos': MyOSFinder(timeout),
+```
+
+3. Add `'myos'` to the `--os` argparse choices in `main()`.
+
+---
+
+## Credits
+
+| Project | Role |
+|---|---|
+| [Mido](https://github.com/ElliotKillick/Mido) by [@ElliotKillick](https://github.com/ElliotKillick) | Windows 11 ISO download — Mido replicates Microsoft's JavaScript session-token flow to deliver a direct ISO. os-download clones and invokes it automatically. |
+
+---
+
+## Built with
+
+| | |
+|---|---|
+| **Python 3.9+** | Core language |
+| **requests** | HTTP with retry logic and resume support |
+| **rich** | Terminal progress bars and formatted output |
+| **uv** | Fast dependency management and script runner |
+
+---
 
 ## License
 
-This tool is provided as-is for educational and personal use. Please respect the download policies and licensing terms of each operating system.
+MIT
