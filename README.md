@@ -224,12 +224,12 @@ class MyOSFinder(BaseOSFinder):
 
 ## Built with
 
-| | |
-|---|---|
-| **Python 3.9+** | Core language |
-| **requests** | HTTP with retry logic and resume support |
-| **rich** | Terminal progress bars and formatted output |
-| **uv** | Fast dependency management and script runner |
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
+![uv](https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=python&logoColor=white)
+![requests](https://img.shields.io/badge/requests-HTTP-20232A)
+![Rich](https://img.shields.io/badge/Rich-terminal%20UI-0F766E)
+![pytest](https://img.shields.io/badge/pytest-tested-0A9EDC?logo=pytest&logoColor=white)
+![Ruff](https://img.shields.io/badge/Ruff-linted-D7FF64?logo=ruff&logoColor=black)
 
 ---
 

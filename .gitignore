@@ -12,7 +12,8 @@ build/
 
 # Generated output files
 all_os_links.txt
+logs/
 
 # Exclude the contents of the downloads folder
 downloads/*
-!downloads/Usage.mdlogs/
+!downloads/Usage.md
