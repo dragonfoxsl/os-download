@@ -36,3 +36,21 @@ Self-review notes:
   - `OPNsenseFinder` now returns `{}` when URL verification fails.
   - `TrueNASFinder` now falls back to the public download page for unknown codenames.
 - Preserved the expected exported registry surface: `OS_CHOICES`, `prompt_override_url`, `run_finder`, and `MultiOSDownloadFinder`.
+
+---
+
+STATUS: completed
+
+Files changed:
+- `src/os_download/finders/registry.py`
+- `tests/test_registry.py`
+- `.superpowers/sdd/task-3-report.md`
+
+Command output summary:
+- `.venv/bin/python -m pytest tests/test_opnsense_finder.py tests/test_truenas_finder.py -q`
+  - `2 passed in 0.10s`
+- `.venv/bin/python -m pytest tests/test_registry.py -q`
+  - `1 passed in 0.18s`
+
+Commit hash:
+- `0c21bf1` - `fix: restore quiet registry path`
