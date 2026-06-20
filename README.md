@@ -192,7 +192,7 @@ subclass) is independent:            • streams in chunks
 
 ### Adding a new OS
 
-1. Subclass `BaseOSFinder` in `os_download_finder.py`:
+1. Add a finder module under `src/os_download/finders/` that subclasses `BaseOSFinder` from `src/os_download/finders/base.py`:
 
 ```python
 class MyOSFinder(BaseOSFinder):
@@ -204,13 +204,13 @@ class MyOSFinder(BaseOSFinder):
         return {'amd64': 'https://...'}
 ```
 
-2. Register it in `MultiOSDownloadFinder.__init__`:
+2. Register it in `src/os_download/finders/registry.py`:
 
 ```python
 'myos': MyOSFinder(timeout),
 ```
 
-3. Add `'myos'` to the `--os` argparse choices in `main()`.
+3. Add `'myos'` to `OS_CHOICES` so `src/os_download/cli/finder.py` exposes it through `--os`.
 
 ---
 

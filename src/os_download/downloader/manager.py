@@ -1,11 +1,17 @@
 import logging
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor
+from concurrent.futures import wait as cf_wait
 from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
 from rich.progress import (
     BarColumn,
     DownloadColumn,
@@ -15,6 +21,7 @@ from rich.progress import (
     TimeRemainingColumn,
     TransferSpeedColumn,
 )
+from rich.table import Table
 
 from os_download.downloader.checksums import verify_checksum
 from os_download.downloader.compression import decompress_file
@@ -25,6 +32,7 @@ from os_download.http import build_session
 
 console = Console()
 logger = logging.getLogger("os_download")
+_SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 
 
 def _keyboard_listener(quit_event: threading.Event, stop_event: threading.Event) -> None:
@@ -73,6 +81,12 @@ class DownloadManager:
 
     def get_resume_position(self, filepath: Path) -> int:
         return filepath.stat().st_size if filepath.exists() else 0
+
+    def _final_filepath(self, url: str, decompress: bool) -> Path:
+        filepath = self.download_dir / self.get_filename_from_url(url)
+        if decompress and filepath.suffix.lower() in (".bz2", ".gz"):
+            return filepath.with_suffix("")
+        return filepath
 
     def _download_with_mido(self, variant: str) -> bool:
         return download_with_mido(variant, self.download_dir)
@@ -125,6 +139,117 @@ class DownloadManager:
                 if line and not line.startswith("#"):
                     urls.append(line)
         return urls
+
+    def _build_speed_sparkline(self, speed_samples: deque[tuple[float, int]]) -> str:
+        if len(speed_samples) < 2:
+            return "[dim]—[/dim]"
+
+        speeds = []
+        for index in range(1, len(speed_samples)):
+            delta_t = speed_samples[index][0] - speed_samples[index - 1][0]
+            delta_b = speed_samples[index][1] - speed_samples[index - 1][1]
+            if delta_t > 0:
+                speeds.append(max(0.0, delta_b / delta_t))
+
+        if not speeds:
+            return "[dim]—[/dim]"
+
+        peak = max(speeds) or 1.0
+        bars = "".join(_SPARK_CHARS[min(8, int(speed / peak * 8))] for speed in speeds[-20:])
+        current_mbs = speeds[-1] / 1_048_576
+        return f"[yellow]{bars}[/yellow] [bold]{current_mbs:.1f} MB/s[/bold]"
+
+    def _update_session_header(
+        self,
+        layout: Layout,
+        progress: Progress,
+        speed_samples: deque[tuple[float, int]],
+        start_time: float,
+        parallel: int,
+        session_urls: list[str],
+        session_state: dict[str, object],
+    ) -> None:
+        done_count = int(session_state["done_count"])
+        failed = session_state["failed"]
+        assert isinstance(failed, list)
+        interrupted = bool(session_state["interrupted"])
+
+        elapsed = time.monotonic() - start_time
+        total_bytes = sum(task.completed for task in progress.tasks if task.completed is not None)
+        speed_samples.append((time.monotonic(), total_bytes))
+        minutes, seconds = divmod(int(elapsed), 60)
+        active = min(parallel, max(0, len(session_urls) - done_count))
+        done_ok = done_count - len(failed)
+        waiting = max(0, len(session_urls) - done_count - active)
+        pct = int(done_count / len(session_urls) * 100) if session_urls else 0
+
+        parts: list[str] = []
+        if active > 0:
+            parts.append(f"[cyan]▶ {active} downloading[/cyan]")
+        if done_ok > 0:
+            parts.append(f"[green]✓ {done_ok} done[/green]")
+        if failed:
+            last_name = self.get_filename_from_url(failed[-1])
+            short = last_name[:24] + "…" if len(last_name) > 25 else last_name
+            parts.append(f"[red]✗ {len(failed)} failed[/red] [dim]({short})[/dim]")
+        if waiting > 0:
+            parts.append(f"[dim]○ {waiting} queued[/dim]")
+
+        status = "  ".join(parts) if parts else "[dim]preparing…[/dim]"
+        file_cell = f"{status}  [dim]·  {done_count}/{len(session_urls)}  {pct}%[/dim]"
+
+        grid = Table.grid(expand=True, padding=(0, 3))
+        grid.add_column(style="bold dim", min_width=14)
+        grid.add_column(min_width=24)
+        grid.add_column(style="bold dim", min_width=10)
+        grid.add_column()
+        grid.add_row("Files", file_cell, "Elapsed", f"{minutes:02d}:{seconds:02d}")
+        grid.add_row(
+            "Downloaded",
+            f"[cyan]{total_bytes / 1_048_576:.1f} MB[/cyan]",
+            "Speed",
+            self._build_speed_sparkline(speed_samples),
+        )
+
+        if interrupted:
+            header_title = "[bold yellow]⏸  os-download[/bold yellow]"
+            border_style = "yellow"
+        elif done_count == len(session_urls) and not failed:
+            header_title = "[bold green]✓  os-download[/bold green]"
+            border_style = "green"
+        elif done_count == len(session_urls) and failed:
+            header_title = "[bold red]✗  os-download[/bold red]"
+            border_style = "red"
+        else:
+            header_title = "[bold cyan]os-download[/bold cyan]"
+            border_style = "cyan"
+
+        layout["header"].update(
+            Panel(grid, title=header_title, border_style=border_style, padding=(1, 2))
+        )
+
+    def _refresh_session_header(
+        self,
+        stop_event: threading.Event,
+        layout: Layout,
+        progress: Progress,
+        speed_samples: deque[tuple[float, int]],
+        start_time: float,
+        parallel: int,
+        session_urls: list[str],
+        session_state: dict[str, object],
+    ) -> None:
+        while not stop_event.is_set():
+            self._update_session_header(
+                layout,
+                progress,
+                speed_samples,
+                start_time,
+                parallel,
+                session_urls,
+                session_state,
+            )
+            time.sleep(0.25)
 
     def download_file(
         self,
@@ -185,7 +310,7 @@ class DownloadManager:
                         if not own_progress and task_id is not None and progress is not None:
                             progress.update(task_id, total=server_size, completed=server_size)
                         logger.info("ALREADY_COMPLETE  %s", filepath.name)
-                        return True
+                        return self._post_download(filepath, url, verify, decompress, own_progress)
                 resume_pos = 0
                 response = self.session.get(url, stream=True, timeout=30)
 
@@ -257,44 +382,344 @@ class DownloadManager:
         parallel = max(1, parallel)
         mido_urls = [url for url in all_urls if url.startswith("mido://")]
         urls = [url for url in all_urls if not url.startswith("mido://")]
+        urls_to_skip: set[str] = set()
+        recent_urls: set[str] = set()
+
+        if interactive:
+            recent: list[tuple[str, str, float]] = []
+            for url in urls:
+                filepath = self._final_filepath(url, decompress)
+                if filepath.exists() and filepath.stat().st_size > 0:
+                    age = time.time() - filepath.stat().st_mtime
+                    if age < 86400:
+                        recent.append((url, filepath.name, age))
+                        recent_urls.add(url)
+            if recent:
+                count = len(recent)
+                console.print(
+                    f"\n  [green]{count} file{'s' if count != 1 else ''} already downloaded "
+                    f"in the last 24 hours:[/green]"
+                )
+                for _, filename, age in recent:
+                    hours, remainder = divmod(int(age), 3600)
+                    minutes = remainder // 60
+                    console.print(f"    [dim]·[/dim] {filename}  [dim]({hours}h {minutes:02d}m ago)[/dim]")
+                console.print(
+                    "  Re-download anyway? [dim](y = yes / N = skip)[/dim]  ",
+                    end="",
+                )
+                try:
+                    ans = input().strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    ans = ""
+                if ans not in ("y", "yes"):
+                    urls_to_skip = {url for url, _, _ in recent}
+                else:
+                    for url, _, _ in recent:
+                        filepath = self._final_filepath(url, decompress)
+                        try:
+                            filepath.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+
+        if resume and interactive:
+            partial = [
+                url
+                for url in urls
+                if url not in recent_urls
+                and (self.download_dir / self.get_filename_from_url(url)).exists()
+            ]
+            if partial:
+                count = len(partial)
+                console.print(
+                    f"\n  [yellow]Found {count} file{'s' if count != 1 else ''} from a previous session.[/yellow]"
+                    "  [bold]R[/bold]esume / [bold]s[/bold]tart from scratch?"
+                    "  [dim](Enter = resume)[/dim]  ",
+                    end="",
+                )
+                try:
+                    ans = input().strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    ans = ""
+                if ans in ("s", "scratch", "n", "no"):
+                    resume = False
+
+        urls_to_try = [url for url in urls if url not in urls_to_skip]
 
         total_success = 0
+        total_interrupted = False
+
         for url in mido_urls:
             ok = self._download_with_mido(url[len("mido://") :])
             if ok:
                 total_success += 1
 
-        if parallel == 1:
-            for url in urls:
-                ok = self.download_file(url, resume=resume, verify=verify, decompress=decompress)
-                if ok:
-                    total_success += 1
-                    continue
-                if interactive:
-                    console.print("\nContinue? [dim](y/N)[/dim] ", end="")
-                    try:
-                        ans = input().strip().lower()
-                    except (EOFError, KeyboardInterrupt):
-                        ans = ""
-                    if ans not in ("y", "yes"):
-                        break
-            return total_success == len(all_urls)
+        if not urls_to_try:
+            if not mido_urls:
+                console.print("[green]All files are recent; nothing to download.[/]")
+            return total_success > 0 or not mido_urls
 
-        future_to_url = {}
-        with ThreadPoolExecutor(max_workers=parallel) as executor:
-            for url in urls:
-                future = executor.submit(
+        while True:
+            session_urls = urls_to_try
+            start_time = time.monotonic()
+            done_count = 0
+            failed: list[str] = []
+            interrupted = False
+            stop_event = threading.Event()
+            speed_samples: deque[tuple[float, int]] = deque(maxlen=40)
+            session_state: dict[str, object] = {
+                "done_count": done_count,
+                "failed": failed,
+                "interrupted": interrupted,
+            }
+
+            progress = Progress(
+                TextColumn("[bold cyan]{task.description:.42}"),
+                BarColumn(bar_width=None),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(),
+                console=console,
+                expand=True,
+            )
+            task_ids = {
+                url: progress.add_task(self.get_filename_from_url(url), total=None)
+                for url in session_urls
+            }
+
+            body_size = len(session_urls) + 2
+            layout = Layout()
+            layout.split_column(
+                Layout(name="header", size=7),
+                Layout(name="body", size=body_size),
+                Layout(name="footer", size=1),
+            )
+            layout["body"].update(Panel(progress, title="[dim]Files[/]", border_style="dim"))
+
+            shortcuts = Table.grid(expand=True, padding=(0, 1))
+            shortcuts.add_column(justify="left")
+            shortcuts.add_column(justify="right")
+            shortcuts.add_row(
+                "  [bold dim]q[/bold dim] [dim]quit[/dim]"
+                "   [bold dim]Ctrl+C[/bold dim] [dim]interrupt[/dim]"
+                "   [dim]— partial files resume automatically[/dim]",
+                f"[dim]parallel={parallel}  resume={'on' if resume else 'off'}"
+                f"  verify={'on' if verify else 'off'}  [/dim]",
+            )
+            layout["footer"].update(shortcuts)
+
+            self._update_session_header(
+                layout, progress, speed_samples, start_time, parallel, session_urls, session_state
+            )
+
+            refresh_thread = threading.Thread(
+                target=self._refresh_session_header,
+                args=(
+                    stop_event,
+                    layout,
+                    progress,
+                    speed_samples,
+                    start_time,
+                    parallel,
+                    session_urls,
+                    session_state,
+                ),
+                daemon=True,
+            )
+            executor = ThreadPoolExecutor(max_workers=parallel)
+            futures = {
+                executor.submit(
                     self.download_file,
                     url,
-                    resume=resume,
-                    verify=verify,
-                    decompress=decompress,
+                    None,
+                    resume,
+                    verify,
+                    decompress,
+                    progress,
+                    task_ids[url],
+                    stop_event,
+                ): url
+                for url in session_urls
+            }
+
+            quit_event = threading.Event()
+            kb_thread = threading.Thread(
+                target=_keyboard_listener, args=(quit_event, stop_event), daemon=True
+            )
+
+            pending: set = set()
+            with Live(layout, console=console, refresh_per_second=4):
+                refresh_thread.start()
+                kb_thread.start()
+                try:
+                    pending = set(futures.keys())
+                    while pending:
+                        if quit_event.is_set():
+                            interrupted = True
+                            session_state["interrupted"] = interrupted
+                            stop_event.set()
+                            for future in pending:
+                                future.cancel()
+                            logger.warning("SESSION QUIT by user (q)")
+                            self._update_session_header(
+                                layout,
+                                progress,
+                                speed_samples,
+                                start_time,
+                                parallel,
+                                session_urls,
+                                session_state,
+                            )
+                            break
+
+                        done_set, pending = cf_wait(
+                            pending, timeout=0.2, return_when=FIRST_COMPLETED
+                        )
+
+                        for future in done_set:
+                            future_url = futures[future]
+                            try:
+                                ok = future.result()
+                            except KeyboardInterrupt:
+                                raise
+                            except Exception as exc:
+                                logger.error("FUTURE ERROR  %s  -  %s", future_url, exc)
+                                ok = False
+
+                            done_count += 1
+                            session_state["done_count"] = done_count
+                            if not ok:
+                                failed.append(future_url)
+                            self._update_session_header(
+                                layout,
+                                progress,
+                                speed_samples,
+                                start_time,
+                                parallel,
+                                session_urls,
+                                session_state,
+                            )
+
+                            if not ok and interactive and parallel == 1:
+                                should_continue = True
+                                try:
+                                    ans = input("\nContinue? [dim](y/N)[/dim] ").strip().lower()
+                                    if ans not in ("y", "yes"):
+                                        should_continue = False
+                                except KeyboardInterrupt:
+                                    interrupted = True
+                                    should_continue = False
+                                if not should_continue:
+                                    stop_event.set()
+                                    for pending_future in pending:
+                                        pending_future.cancel()
+                                    pending = set()
+                                    break
+
+                except KeyboardInterrupt:
+                    interrupted = True
+                    session_state["interrupted"] = interrupted
+                    stop_event.set()
+                    for future in pending:
+                        future.cancel()
+                    logger.warning("SESSION INTERRUPTED by user")
+                    self._update_session_header(
+                        layout,
+                        progress,
+                        speed_samples,
+                        start_time,
+                        parallel,
+                        session_urls,
+                        session_state,
+                    )
+                finally:
+                    stop_event.set()
+
+                kb_thread.join(timeout=0.5)
+                executor.shutdown(wait=True)
+
+                elapsed = time.monotonic() - start_time
+                total_bytes = sum(task.completed for task in progress.tasks if task.completed is not None)
+                minutes, seconds = divmod(int(elapsed), 60)
+                success = len(session_urls) - len(failed)
+                total_success += success
+                if interrupted:
+                    total_interrupted = True
+
+                if interrupted:
+                    border_style, title = "yellow", "⏸  Interrupted"
+                elif failed:
+                    border_style, title = "red", "✗  Finished with errors"
+                else:
+                    border_style, title = "green", "✓  Complete"
+
+                lines = [
+                    f"  [bold]Files[/bold]       [green]{success}[/green] downloaded"
+                    + (f"  [red]{len(failed)} failed[/red]" if failed else ""),
+                    f"  [bold]Data[/bold]        {total_bytes / 1_048_576:.1f} MB",
+                    f"  [bold]Time[/bold]        {minutes:02d}:{seconds:02d}",
+                ]
+                if interrupted:
+                    lines.append("\n  [dim]Partial files can be resumed with the same command.[/dim]")
+                for failed_url in failed:
+                    lines.append(f"  [red]✗[/red] {self.get_filename_from_url(failed_url)}")
+
+                completion_size = 2 + len(lines) + (1 if interrupted else 0)
+                layout.split_column(
+                    Layout(name="header", size=7),
+                    Layout(name="body", size=body_size),
+                    Layout(name="completion", size=completion_size),
+                    Layout(name="footer", size=1),
                 )
-                future_to_url[future] = url
+                layout["body"].update(Panel(progress, title="[dim]Files[/]", border_style="dim"))
+                layout["completion"].update(
+                    Panel(
+                        "\n".join(lines),
+                        title=f"[bold]{title}[/bold]",
+                        border_style=border_style,
+                        expand=True,
+                    )
+                )
+                layout["footer"].update(shortcuts)
+                self._update_session_header(
+                    layout,
+                    progress,
+                    speed_samples,
+                    start_time,
+                    parallel,
+                    session_urls,
+                    session_state,
+                )
+                time.sleep(0.15)
 
-            for future in as_completed(future_to_url):
-                ok = future.result()
-                if ok:
-                    total_success += 1
+            logger.info(
+                "SESSION DONE  success=%d  failed=%d  interrupted=%s  bytes=%d  elapsed=%.1fs",
+                success,
+                len(failed),
+                interrupted,
+                total_bytes,
+                elapsed,
+            )
 
-        return total_success == len(all_urls)
+            if failed and not interrupted and interactive:
+                count = len(failed)
+                console.print()
+                console.print(
+                    f"  [yellow]▶ {count} file{'s' if count != 1 else ''} failed.[/yellow]"
+                    "  Retry? [dim](y/N)[/dim] ",
+                    end="",
+                )
+                try:
+                    ans = input().strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    ans = "n"
+                if ans in ("y", "yes"):
+                    urls_to_try = list(failed)
+                    console.print(
+                        f"\n  [dim]Queuing {count} file{'s' if count != 1 else ''} for retry…[/dim]\n"
+                    )
+                    continue
+
+            break
+
+        return total_success > 0 and not total_interrupted

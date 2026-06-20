@@ -1,4 +1,5 @@
 import gzip
+import os
 import threading
 import time
 from pathlib import Path
@@ -34,9 +35,10 @@ def test_download_file_treats_416_resume_as_complete_when_local_size_matches_ser
     tmp_path: Path, monkeypatch
 ):
     manager = DownloadManager(download_dir=str(tmp_path))
-    filepath = tmp_path / "image.iso"
-    filepath.write_bytes(b"12345")
-    post_download_calls = []
+    filepath = tmp_path / "image.iso.gz"
+    filepath.write_bytes(gzip.compress(b"iso"))
+    archive_size = filepath.stat().st_size
+    calls = []
 
     class Response416:
         status_code = 416
@@ -49,7 +51,7 @@ def test_download_file_treats_416_resume_as_complete_when_local_size_matches_ser
             raise AssertionError("416 resume path should not raise for a complete file")
 
     class HeadResponse:
-        headers = {"content-length": "5"}
+        headers = {"content-length": str(archive_size)}
 
     class Session:
         def __init__(self):
@@ -67,21 +69,44 @@ def test_download_file_treats_416_resume_as_complete_when_local_size_matches_ser
     monkeypatch.setattr(manager, "session", Session())
     monkeypatch.setattr(
         manager,
-        "_post_download",
-        lambda *args, **kwargs: post_download_calls.append((args, kwargs)) or True,
+        "verify_checksum",
+        lambda path, url: calls.append(("verify", path.name, path.exists(), url)) or True,
     )
 
-    assert manager.download_file("https://example.test/image.iso", resume=True)
+    def fake_decompress(path: Path, verbose: bool = True) -> Path:
+        calls.append(("decompress", path.name, path.exists(), verbose))
+        output = path.with_suffix("")
+        output.write_bytes(b"iso")
+        path.unlink()
+        return output
+
+    monkeypatch.setattr(manager, "decompress", fake_decompress)
+
+    assert manager.download_file(
+        "https://example.test/image.iso.gz",
+        resume=True,
+        verify=True,
+        decompress=True,
+    )
     assert manager.session.get_calls == [
         (
-            "https://example.test/image.iso",
-            {"Range": "bytes=5-"},
+            "https://example.test/image.iso.gz",
+            {"Range": f"bytes={archive_size}-"},
             True,
             30,
         )
     ]
-    assert manager.session.head_calls == [("https://example.test/image.iso", 30, True)]
-    assert post_download_calls == []
+    assert manager.session.head_calls == [("https://example.test/image.iso.gz", 30, True)]
+    assert calls == [
+        (
+            "verify",
+            "image.iso.gz",
+            True,
+            "https://example.test/image.iso.gz",
+        ),
+        ("decompress", "image.iso.gz", True, True),
+    ]
+    assert (tmp_path / "image.iso").read_bytes() == b"iso"
 
 
 def test_download_file_restarts_from_scratch_after_416_when_local_size_is_short(
@@ -229,7 +254,16 @@ def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monke
     inflight = 0
     max_inflight = 0
 
-    def fake_download_file(url: str, **kwargs) -> bool:
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
         nonlocal inflight, max_inflight
         with lock:
             inflight += 1
@@ -251,3 +285,117 @@ def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monke
         parallel=3,
     )
     assert max_inflight >= 2
+
+
+def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    url = "https://example.test/recent.iso"
+    filepath = tmp_path / "recent.iso"
+    filepath.write_bytes(b"complete")
+
+    monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
+    monkeypatch.setattr("builtins.input", lambda *args: "")
+    monkeypatch.setattr(
+        manager,
+        "download_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recent file should be skipped")),
+    )
+
+    assert manager.download_from_file("ignored.txt", interactive=True, parallel=1)
+
+
+def test_download_from_file_can_restart_older_partial_files_from_scratch(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    url = "https://example.test/partial.iso"
+    filepath = tmp_path / "partial.iso"
+    filepath.write_bytes(b"partial")
+    old = time.time() - (2 * 86400)
+    os.utime(filepath, (old, old))
+
+    prompts = iter(["s"])
+    calls = []
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        calls.append((url, resume))
+        return True
+
+    monkeypatch.setattr("builtins.input", lambda *args: next(prompts))
+    monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert manager.download_from_file("ignored.txt", resume=True, interactive=True, parallel=1)
+    assert calls == [(url, False)]
+
+
+def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    urls = [
+        "https://example.test/fail-once.iso",
+        "https://example.test/ok.iso",
+    ]
+    prompts = iter(["y", "y"])
+    attempts = {urls[0]: [False, True], urls[1]: [True]}
+    calls = []
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        calls.append(url)
+        return attempts[url].pop(0)
+
+    monkeypatch.setattr("builtins.input", lambda *args: next(prompts))
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert manager.download_from_file("ignored.txt", interactive=True, parallel=1)
+    assert calls == [urls[0], urls[1], urls[0]]
+
+
+def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    url = "https://example.test/quit.iso"
+    saw_stop_event = []
+
+    def fake_keyboard_listener(quit_event, stop_event):
+        quit_event.set()
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        assert stop_event is not None
+        while not stop_event.is_set():
+            time.sleep(0.01)
+        saw_stop_event.append(stop_event.is_set())
+        return False
+
+    monkeypatch.setattr("os_download.downloader.manager._keyboard_listener", fake_keyboard_listener)
+    monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=1)
+    assert saw_stop_event == [True]
