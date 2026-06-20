@@ -36,7 +36,4 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
 
 [tool.hatch.build.targets.wheel]
-include = [
-    "os_download_finder.py",
-    "download_manager.py",
-]
+packages = ["src/os_download"]
