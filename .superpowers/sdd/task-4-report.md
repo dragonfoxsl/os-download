@@ -54,3 +54,20 @@ Self-review notes:
 - Added package `DownloadManager` wrappers around Task 2 helpers for session creation, checksum verification, and decompression.
 - Updated `_post_download()` to verify the downloaded archive before decompression, which is the behavior covered by the focused regression test.
 - Left legacy top-level downloader script untouched, per task constraints.
+
+---
+
+STATUS: done
+
+Files changed:
+- `src/os_download/downloader/manager.py`
+- `tests/test_downloader_post_download.py`
+- `.superpowers/sdd/task-4-report.md`
+
+Command output summary:
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_downloader_post_download.py -q`
+  - Red: `3 failed, 1 passed` while the 416 resume and batch parallel regressions were still present.
+  - Green: `4 passed in 0.34s` after restoring the legacy-compatible 416 handling and honoring batch `parallel`.
+
+Commits:
+- `abc48db` - `fix: restore downloader batch compatibility`
