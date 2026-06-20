@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -10,7 +9,7 @@ class MXLinuxFinder(BaseOSFinder):
         self.sf_rss = "https://sourceforge.net/projects/mx-linux/rss?path=/Final&limit=50"
         self.sf_final = "https://sourceforge.net/projects/mx-linux/files/Final/"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         try:
             response = self.session.get(self.sf_rss, timeout=self.timeout)
             if response.status_code == 200:

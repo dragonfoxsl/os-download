@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -9,7 +8,7 @@ class CachyOSFinder(BaseOSFinder):
         super().__init__("CachyOS", timeout)
         self.mirror_base = "https://mirror.cachyos.org/ISO/desktop/"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         try:
             response = self.session.get(self.mirror_base, timeout=self.timeout)
             response.raise_for_status()

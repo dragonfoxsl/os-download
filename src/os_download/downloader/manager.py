@@ -3,7 +3,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from rich.console import Console
 from rich.progress import (
@@ -113,12 +113,12 @@ class DownloadManager:
         logger.info("DONE   %s", filepath.name)
         return True
 
-    def _read_urls(self, file_path: str) -> List[str]:
+    def _read_urls(self, file_path: str) -> list[str]:
         path = Path(file_path)
         if not path.exists():
             console.print(f"[red]URL file not found:[/] {file_path}")
             return []
-        urls: List[str] = []
+        urls: list[str] = []
         with open(path, encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()

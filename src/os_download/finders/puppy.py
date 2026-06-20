@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Optional, Tuple
+from typing import Optional
 from urllib.parse import urljoin
 
 from os_download.finders.base import BaseOSFinder
@@ -17,7 +17,7 @@ class PuppyLinuxFinder(BaseOSFinder):
         self.distro_url = "http://distro.ibiblio.org/puppylinux/"
         self.download_url = "http://puppylinux-woof-ce.github.io/woof-CE/index.html#downloads"
 
-    def _try_sourceforge(self) -> Optional[Tuple[str, str]]:
+    def _try_sourceforge(self) -> Optional[tuple[str, str]]:
         for project, variant in self.SF_PROJECTS:
             try:
                 response = self.session.get(
@@ -51,7 +51,7 @@ class PuppyLinuxFinder(BaseOSFinder):
                 continue
         return None
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         sourceforge_result = self._try_sourceforge()
         if sourceforge_result:
             variant, url = sourceforge_result

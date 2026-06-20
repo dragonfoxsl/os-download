@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -9,7 +8,7 @@ class OPNsenseFinder(BaseOSFinder):
         super().__init__("OPNsense", timeout)
         self.pkg_index = "https://pkg.opnsense.org/releases/"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         try:
             response = self.session.get(self.pkg_index, timeout=self.timeout)
             response.raise_for_status()

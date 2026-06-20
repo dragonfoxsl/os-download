@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import sys
-from typing import Dict
 
 from rich import box as rich_box
 from rich.console import Console
@@ -10,14 +9,14 @@ from rich.panel import Panel
 from rich.table import Table
 
 from os_download.finders.base import ISO_EXTS, url_kind
-from os_download.finders.registry import MultiOSDownloadFinder, OS_CHOICES
+from os_download.finders.registry import OS_CHOICES, MultiOSDownloadFinder
 from os_download.logging import setup_file_logger
 
 logger = logging.getLogger("os_finder")
 console = Console()
 
 
-def _print_summary(finder: MultiOSDownloadFinder, all_links: Dict[str, Dict[str, str]]) -> None:
+def _print_summary(finder: MultiOSDownloadFinder, all_links: dict[str, dict[str, str]]) -> None:
     table = Table(
         title="[bold]Resolved Links[/]",
         box=rich_box.ROUNDED,

@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -9,7 +8,7 @@ class PfSenseFinder(BaseOSFinder):
         super().__init__("pfSense CE", timeout)
         self.cdn_url = "https://atxfiles.netgate.com/mirror/downloads/"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         try:
             response = self.session.get(self.cdn_url, timeout=self.timeout)
             response.raise_for_status()

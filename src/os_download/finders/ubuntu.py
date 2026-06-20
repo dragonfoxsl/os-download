@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Optional, Tuple
+from typing import Optional
 from urllib.parse import urljoin
 
 from os_download.finders.base import BaseOSFinder
@@ -11,7 +11,7 @@ class UbuntuFinder(BaseOSFinder):
         self.base_url = "http://releases.ubuntu.com/"
         self.api_url = "https://api.launchpad.net/1.0/ubuntu/series"
 
-    def _get_versions(self) -> Tuple[Optional[str], Optional[str]]:
+    def _get_versions(self) -> tuple[Optional[str], Optional[str]]:
         try:
             response = self.session.get(self.api_url, timeout=self.timeout)
             response.raise_for_status()
@@ -46,7 +46,7 @@ class UbuntuFinder(BaseOSFinder):
 
         return None, None
 
-    def _links_for_version(self, version: str) -> Dict[str, str]:
+    def _links_for_version(self, version: str) -> dict[str, str]:
         base_url = f"{self.base_url}{version}/"
         links = {
             "desktop": f"{base_url}ubuntu-{version}-desktop-amd64.iso",
@@ -66,7 +66,7 @@ class UbuntuFinder(BaseOSFinder):
             pass
         return links
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         latest_version, lts_version = self._get_versions()
         if not lts_version and not latest_version:
             return {}

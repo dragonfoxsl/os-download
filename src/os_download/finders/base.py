@@ -1,4 +1,3 @@
-from typing import Dict, Tuple
 
 from os_download.http import build_session
 
@@ -19,18 +18,18 @@ class BaseOSFinder:
         except Exception:
             return False
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         raise NotImplementedError
 
 
-def has_iso_link(links: Dict[str, str]) -> bool:
+def has_iso_link(links: dict[str, str]) -> bool:
     return any(
         url.lower().endswith(ISO_EXTS) or url.startswith("mido://")
         for url in links.values()
     )
 
 
-def url_kind(url: str) -> Tuple[str, str]:
+def url_kind(url: str) -> tuple[str, str]:
     if url.startswith("mido://"):
         return "Mido", "blue"
     if url.lower().endswith(ISO_EXTS):

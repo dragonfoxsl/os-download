@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -8,7 +7,7 @@ class DebianFinder(BaseOSFinder):
     def __init__(self, timeout: int = 15):
         super().__init__("Debian", timeout)
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         links = {}
 
         try:

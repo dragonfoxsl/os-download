@@ -1,5 +1,4 @@
 import re
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -10,7 +9,7 @@ class ManjaroKDEFinder(BaseOSFinder):
         self.products_url = "https://manjaro.org/products/download/x86"
         self.download_url = "https://manjaro.org/download/"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         try:
             response = self.session.get(self.products_url, timeout=self.timeout)
             response.raise_for_status()

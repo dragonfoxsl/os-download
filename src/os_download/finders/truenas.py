@@ -1,4 +1,3 @@
-from typing import Dict
 
 from os_download.finders.base import BaseOSFinder
 
@@ -16,7 +15,7 @@ class TrueNASFinder(BaseOSFinder):
         self.github_api = "https://api.github.com/repos/truenas/truenas-scale/releases/latest"
         self.download_base = "https://download.sys.truenas.net/TrueNAS-SCALE-"
 
-    def find_download_links(self) -> Dict[str, str]:
+    def find_download_links(self) -> dict[str, str]:
         version = None
         try:
             response = self.session.get(self.github_api, timeout=self.timeout)

@@ -3,7 +3,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import redirect_stdout
-from typing import Dict, List, Optional
+from typing import Optional
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -91,16 +91,16 @@ class MultiOSDownloadFinder:
 
     def find_all_links(
         self,
-        os_list: Optional[List[str]] = None,
+        os_list: Optional[list[str]] = None,
         interactive: bool = True,
         quiet: bool = False,
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> dict[str, dict[str, str]]:
         valid = [name for name in (os_list or list(self.finders)) if name in self.finders]
         for name in os_list or []:
             if name not in self.finders:
                 console.print(f"[yellow]Unknown OS: {name}[/]")
 
-        results: Dict[str, Dict[str, str]] = {}
+        results: dict[str, dict[str, str]] = {}
         if not valid:
             return {}
 
@@ -159,7 +159,7 @@ class MultiOSDownloadFinder:
                     console.print("\n[yellow]⏸  Interrupted — returning partial results.[/]")
                     logger.warning("FINDER INTERRUPTED by user")
 
-        all_links: Dict[str, Dict[str, str]] = {}
+        all_links: dict[str, dict[str, str]] = {}
         for name in valid:
             links = results.get(name, {})
             if interactive and not has_iso_link(links):
@@ -172,7 +172,7 @@ class MultiOSDownloadFinder:
 
     def save_links_to_file(
         self,
-        all_links: Dict[str, Dict[str, str]],
+        all_links: dict[str, dict[str, str]],
         output_path: str = "./os-links/all_os.txt",
     ) -> None:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
