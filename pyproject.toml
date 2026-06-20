@@ -16,8 +16,8 @@ dev = [
 ]
 
 [project.scripts]
-os-finder = "os_download_finder:main"
-os-download = "download_manager:main"
+os-finder = "os_download.cli.finder:main"
+os-download = "os_download.cli.downloader:main"
 
 [build-system]
 requires = ["hatchling"]
