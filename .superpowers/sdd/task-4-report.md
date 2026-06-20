@@ -44,7 +44,8 @@ Commands run and outcomes:
   - Verified staged scope target files only.
 
 Commits made:
-- `54c3d84` — `refactor: move downloader into package`
+- `refactor: move downloader into package`
+- Commit hashes for this task are available in git history and reported in the task handoff response.
 
 Self-review notes:
 - Kept write scope limited to the four package downloader files plus this report.
