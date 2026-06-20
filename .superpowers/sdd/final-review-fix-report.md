@@ -39,3 +39,15 @@
   - Final result: `19 passed in 1.12s`
 - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
   - Final result: `All checks passed!`
+
+## 2026-06-21 Mido Partial-Success Fix
+
+- Fixed `DownloadManager.download_from_file()` so the no-regular-URLs branch only returns success when there are no Mido URLs or every requested Mido URL succeeded.
+- Added a regression test for multiple `mido://` URLs where one succeeds and one fails; the expected result is now `False`.
+- Verified with:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_downloader_post_download.py -q`
+    - Final result: `11 passed in 1.08s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q`
+    - Final result: `20 passed in 1.10s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
+    - Final result: `All checks passed!`

@@ -399,6 +399,31 @@ def test_download_from_file_returns_false_on_partial_failure_without_retry(
     assert calls == urls
 
 
+def test_download_from_file_returns_false_when_mido_batch_has_partial_failure(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    urls = [
+        "mido://success-variant",
+        "mido://fail-variant",
+    ]
+    calls = []
+    results = {
+        "success-variant": True,
+        "fail-variant": False,
+    }
+
+    def fake_download_with_mido(variant: str) -> bool:
+        calls.append(variant)
+        return results[variant]
+
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(manager, "_download_with_mido", fake_download_with_mido)
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=1)
+    assert calls == ["success-variant", "fail-variant"]
+
+
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
     manager = DownloadManager(download_dir=str(tmp_path))
     url = "https://example.test/quit.iso"

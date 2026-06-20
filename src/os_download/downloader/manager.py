@@ -457,7 +457,7 @@ class DownloadManager:
         if not urls_to_try:
             if not mido_urls:
                 console.print("[green]All files are recent; nothing to download.[/]")
-            return total_success > 0 or not mido_urls
+            return not mido_urls or total_success == len(mido_urls)
 
         while True:
             session_urls = urls_to_try
