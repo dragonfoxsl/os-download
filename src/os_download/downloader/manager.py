@@ -181,7 +181,7 @@ class DownloadManager:
                         server_size = int(head.headers.get("content-length", 0))
                     except Exception:
                         server_size = 0
-                    if server_size > 0 and filepath.stat().st_size >= server_size:
+                    if server_size > 0 and filepath.stat().st_size == server_size:
                         if not own_progress and task_id is not None and progress is not None:
                             progress.update(task_id, total=server_size, completed=server_size)
                         logger.info("ALREADY_COMPLETE  %s", filepath.name)

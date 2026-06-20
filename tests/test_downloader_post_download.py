@@ -153,6 +153,75 @@ def test_download_file_restarts_from_scratch_after_416_when_local_size_is_short(
     assert filepath.read_bytes() == b"abcde"
 
 
+def test_download_file_restarts_from_scratch_after_416_when_local_size_is_oversized(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    filepath = tmp_path / "image.iso"
+    filepath.write_bytes(b"1234567")
+
+    class Response416:
+        status_code = 416
+        headers = {}
+
+        def close(self):
+            return None
+
+        def raise_for_status(self):
+            raise AssertionError("oversized local file should restart instead of completing")
+
+    class Response200:
+        status_code = 200
+        headers = {"content-length": "5"}
+
+        def close(self):
+            return None
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size=8192):
+            yield b"abcde"
+
+    class HeadResponse:
+        headers = {"content-length": "5"}
+
+    class Session:
+        def __init__(self):
+            self.get_calls = []
+            self.head_calls = []
+            self._responses = [Response416(), Response200()]
+
+        def get(self, url, headers=None, stream=True, timeout=30):
+            self.get_calls.append((url, headers, stream, timeout))
+            return self._responses.pop(0)
+
+        def head(self, url, timeout=30, allow_redirects=True):
+            self.head_calls.append((url, timeout, allow_redirects))
+            return HeadResponse()
+
+    monkeypatch.setattr(manager, "session", Session())
+    monkeypatch.setattr(manager, "_post_download", lambda *args, **kwargs: True)
+
+    assert manager.download_file("https://example.test/image.iso", resume=True)
+    assert manager.session.get_calls == [
+        (
+            "https://example.test/image.iso",
+            {"Range": "bytes=7-"},
+            True,
+            30,
+        ),
+        (
+            "https://example.test/image.iso",
+            None,
+            True,
+            30,
+        ),
+    ]
+    assert manager.session.head_calls == [("https://example.test/image.iso", 30, True)]
+    assert filepath.read_bytes() == b"abcde"
+
+
 def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monkeypatch):
     manager = DownloadManager(download_dir=str(tmp_path))
     urls = [f"https://example.test/file-{index}.iso" for index in range(3)]
