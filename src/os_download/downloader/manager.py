@@ -722,4 +722,4 @@ class DownloadManager:
 
             break
 
-        return total_success > 0 and not total_interrupted
+        return total_success > 0 and not total_interrupted and not failed

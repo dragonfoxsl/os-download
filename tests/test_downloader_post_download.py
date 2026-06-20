@@ -369,6 +369,36 @@ def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Pat
     assert calls == [urls[0], urls[1], urls[0]]
 
 
+def test_download_from_file_returns_false_on_partial_failure_without_retry(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    urls = [
+        "https://example.test/ok.iso",
+        "https://example.test/fail.iso",
+    ]
+    calls = []
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        calls.append(url)
+        return url.endswith("ok.iso")
+
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=1)
+    assert calls == urls
+
+
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
     manager = DownloadManager(download_dir=str(tmp_path))
     url = "https://example.test/quit.iso"
