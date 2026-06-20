@@ -1,6 +1,7 @@
 import logging
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional
 
@@ -174,6 +175,17 @@ class DownloadManager:
                 return self._post_download(filepath, url, verify, decompress, own_progress)
 
             if resume_pos > 0 and response.status_code != 206:
+                if response.status_code == 416:
+                    try:
+                        head = self.session.head(url, timeout=30, allow_redirects=True)
+                        server_size = int(head.headers.get("content-length", 0))
+                    except Exception:
+                        server_size = 0
+                    if server_size > 0 and filepath.stat().st_size >= server_size:
+                        if not own_progress and task_id is not None and progress is not None:
+                            progress.update(task_id, total=server_size, completed=server_size)
+                        logger.info("ALREADY_COMPLETE  %s", filepath.name)
+                        return True
                 resume_pos = 0
                 response = self.session.get(url, stream=True, timeout=30)
 
@@ -237,20 +249,52 @@ class DownloadManager:
         interactive: bool = True,
         parallel: int = 1,
     ) -> bool:
-        del interactive, parallel
-
         all_urls = self._read_urls(file_path)
         if not all_urls:
             console.print("[yellow]No URLs found in file[/]")
             return False
 
+        parallel = max(1, parallel)
+        mido_urls = [url for url in all_urls if url.startswith("mido://")]
+        urls = [url for url in all_urls if not url.startswith("mido://")]
+
         total_success = 0
-        for url in all_urls:
-            if url.startswith("mido://"):
-                ok = self._download_with_mido(url[len("mido://") :])
-            else:
-                ok = self.download_file(url, resume=resume, verify=verify, decompress=decompress)
+        for url in mido_urls:
+            ok = self._download_with_mido(url[len("mido://") :])
             if ok:
                 total_success += 1
+
+        if parallel == 1:
+            for url in urls:
+                ok = self.download_file(url, resume=resume, verify=verify, decompress=decompress)
+                if ok:
+                    total_success += 1
+                    continue
+                if interactive:
+                    console.print("\nContinue? [dim](y/N)[/dim] ", end="")
+                    try:
+                        ans = input().strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        ans = ""
+                    if ans not in ("y", "yes"):
+                        break
+            return total_success == len(all_urls)
+
+        future_to_url = {}
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            for url in urls:
+                future = executor.submit(
+                    self.download_file,
+                    url,
+                    resume=resume,
+                    verify=verify,
+                    decompress=decompress,
+                )
+                future_to_url[future] = url
+
+            for future in as_completed(future_to_url):
+                ok = future.result()
+                if ok:
+                    total_success += 1
 
         return total_success == len(all_urls)
