@@ -251,6 +251,47 @@ class DownloadManager:
             )
             time.sleep(0.25)
 
+    def _build_completion_summary(
+        self,
+        success: int,
+        failed: list[str],
+        interrupted: bool,
+        mido_failed_count: int,
+        total_bytes: int,
+        elapsed: float,
+    ) -> tuple[str, str, list[str]]:
+        minutes, seconds = divmod(int(elapsed), 60)
+
+        if interrupted:
+            border_style, title = "yellow", "⏸  Interrupted"
+        elif failed or mido_failed_count:
+            border_style, title = "red", "✗  Finished with errors"
+        else:
+            border_style, title = "green", "✓  Complete"
+
+        lines = [
+            f"  [bold]Files[/bold]       [green]{success}[/green] downloaded"
+            + (f"  [red]{len(failed)} failed[/red]" if failed else "")
+            + (
+                f"  [red]{mido_failed_count} Mido failed[/red]"
+                if mido_failed_count
+                else ""
+            ),
+            f"  [bold]Data[/bold]        {total_bytes / 1_048_576:.1f} MB",
+            f"  [bold]Time[/bold]        {minutes:02d}:{seconds:02d}",
+        ]
+        if interrupted:
+            lines.append("\n  [dim]Partial files can be resumed with the same command.[/dim]")
+        if mido_failed_count:
+            lines.append(
+                f"  [red]✗[/red] {mido_failed_count} Mido download"
+                f"{'s' if mido_failed_count != 1 else ''} failed"
+            )
+        for failed_url in failed:
+            lines.append(f"  [red]✗[/red] {self.get_filename_from_url(failed_url)}")
+
+        return border_style, title, lines
+
     def download_file(
         self,
         url: str,
@@ -384,7 +425,7 @@ class DownloadManager:
         urls = [url for url in all_urls if not url.startswith("mido://")]
         urls_to_skip: set[str] = set()
         recent_urls: set[str] = set()
-        mido_failed = False
+        mido_failed_count = 0
 
         if interactive:
             recent: list[tuple[str, str, float]] = []
@@ -455,12 +496,12 @@ class DownloadManager:
             if ok:
                 total_success += 1
             else:
-                mido_failed = True
+                mido_failed_count += 1
 
         if not urls_to_try:
             if not mido_urls:
                 console.print("[green]All files are recent; nothing to download.[/]")
-            return (not mido_urls or total_success == len(mido_urls)) and not mido_failed
+            return (not mido_urls or total_success == len(mido_urls)) and not mido_failed_count
 
         while True:
             session_urls = urls_to_try
@@ -643,29 +684,19 @@ class DownloadManager:
 
                 elapsed = time.monotonic() - start_time
                 total_bytes = sum(task.completed for task in progress.tasks if task.completed is not None)
-                minutes, seconds = divmod(int(elapsed), 60)
                 success = len(session_urls) - len(failed)
                 total_success += success
                 if interrupted:
                     total_interrupted = True
 
-                if interrupted:
-                    border_style, title = "yellow", "⏸  Interrupted"
-                elif failed:
-                    border_style, title = "red", "✗  Finished with errors"
-                else:
-                    border_style, title = "green", "✓  Complete"
-
-                lines = [
-                    f"  [bold]Files[/bold]       [green]{success}[/green] downloaded"
-                    + (f"  [red]{len(failed)} failed[/red]" if failed else ""),
-                    f"  [bold]Data[/bold]        {total_bytes / 1_048_576:.1f} MB",
-                    f"  [bold]Time[/bold]        {minutes:02d}:{seconds:02d}",
-                ]
-                if interrupted:
-                    lines.append("\n  [dim]Partial files can be resumed with the same command.[/dim]")
-                for failed_url in failed:
-                    lines.append(f"  [red]✗[/red] {self.get_filename_from_url(failed_url)}")
+                border_style, title, lines = self._build_completion_summary(
+                    success=success,
+                    failed=failed,
+                    interrupted=interrupted,
+                    mido_failed_count=mido_failed_count,
+                    total_bytes=total_bytes,
+                    elapsed=elapsed,
+                )
 
                 completion_size = 2 + len(lines) + (1 if interrupted else 0)
                 layout.split_column(
@@ -725,4 +756,4 @@ class DownloadManager:
 
             break
 
-        return total_success > 0 and not total_interrupted and not failed and not mido_failed
+        return total_success > 0 and not total_interrupted and not failed and not mido_failed_count

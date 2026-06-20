@@ -63,3 +63,15 @@
     - Final result: `21 passed in 1.27s`
   - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
     - Final result: `All checks passed!`
+
+## 2026-06-21 Mixed Mido Completion UI Fix
+
+- Fixed the final session completion panel in `DownloadManager.download_from_file()` so the title, border color, and summary lines now treat any failed `mido://` download as an error state.
+- Added a focused regression test that exercises the completion-summary builder directly and asserts that a Mido failure produces a red error summary instead of a green success panel.
+- Verified with:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_downloader_post_download.py -q`
+    - Final result: `13 passed in 1.26s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q`
+    - Final result: `22 passed in 1.29s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
+    - Final result: `All checks passed!`

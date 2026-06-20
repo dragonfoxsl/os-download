@@ -459,6 +459,23 @@ def test_download_from_file_returns_false_when_mido_fails_and_regular_downloads_
     assert calls == [("mido", "fail-variant"), ("regular", "https://example.test/ok.iso")]
 
 
+def test_completion_summary_marks_mido_failures_as_errors(tmp_path: Path):
+    manager = DownloadManager(download_dir=str(tmp_path))
+
+    border_style, title, lines = manager._build_completion_summary(
+        success=1,
+        failed=[],
+        interrupted=False,
+        mido_failed_count=1,
+        total_bytes=1024,
+        elapsed=12.3,
+    )
+
+    assert border_style == "red"
+    assert title == "✗  Finished with errors"
+    assert any("Mido" in line for line in lines)
+
+
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
     manager = DownloadManager(download_dir=str(tmp_path))
     url = "https://example.test/quit.iso"
