@@ -8,6 +8,10 @@ class FakeResponse:
         self.status_code = status_code
         self.text = text
 
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
 
 class FakeSession:
     def __init__(self, responses):
@@ -26,7 +30,7 @@ def test_verify_checksum_matches_sidecar(tmp_path: Path):
         {
             "https://example.test/image.iso.gz.sha256": FakeResponse(
                 200,
-                "f5568340a22cf182286a1c3e9563c6f930f09849cc33f235782a8862d230b4e0  image.iso.gz",
+                "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3  image.iso.gz",
             )
         }
     )
@@ -42,7 +46,7 @@ def test_verify_checksum_matches_sha256sums(tmp_path: Path):
             "https://example.test/ubuntu.iso.sha256": FakeResponse(404),
             "https://example.test/SHA256SUMS": FakeResponse(
                 200,
-                "7804a56c0d512d13a538f0d4c9ddc0e59a520e85da4d01b545d1aa2e215ca8bb *ubuntu.iso\n",
+                "7804a56a5c7636cc05814736f44139e32920810d3bd51aa099a5df932e754ce9 *ubuntu.iso\n",
             ),
         }
     )
