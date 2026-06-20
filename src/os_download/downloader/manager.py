@@ -384,6 +384,7 @@ class DownloadManager:
         urls = [url for url in all_urls if not url.startswith("mido://")]
         urls_to_skip: set[str] = set()
         recent_urls: set[str] = set()
+        mido_failed = False
 
         if interactive:
             recent: list[tuple[str, str, float]] = []
@@ -453,11 +454,13 @@ class DownloadManager:
             ok = self._download_with_mido(url[len("mido://") :])
             if ok:
                 total_success += 1
+            else:
+                mido_failed = True
 
         if not urls_to_try:
             if not mido_urls:
                 console.print("[green]All files are recent; nothing to download.[/]")
-            return not mido_urls or total_success == len(mido_urls)
+            return (not mido_urls or total_success == len(mido_urls)) and not mido_failed
 
         while True:
             session_urls = urls_to_try
@@ -722,4 +725,4 @@ class DownloadManager:
 
             break
 
-        return total_success > 0 and not total_interrupted and not failed
+        return total_success > 0 and not total_interrupted and not failed and not mido_failed

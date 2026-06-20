@@ -424,6 +424,41 @@ def test_download_from_file_returns_false_when_mido_batch_has_partial_failure(
     assert calls == ["success-variant", "fail-variant"]
 
 
+def test_download_from_file_returns_false_when_mido_fails_and_regular_downloads_succeed(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    urls = [
+        "mido://fail-variant",
+        "https://example.test/ok.iso",
+    ]
+    calls = []
+
+    def fake_download_with_mido(variant: str) -> bool:
+        calls.append(("mido", variant))
+        return False
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        calls.append(("regular", url))
+        return True
+
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(manager, "_download_with_mido", fake_download_with_mido)
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=1)
+    assert calls == [("mido", "fail-variant"), ("regular", "https://example.test/ok.iso")]
+
+
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
     manager = DownloadManager(download_dir=str(tmp_path))
     url = "https://example.test/quit.iso"

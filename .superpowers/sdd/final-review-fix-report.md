@@ -51,3 +51,15 @@
     - Final result: `20 passed in 1.10s`
   - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
     - Final result: `All checks passed!`
+
+## 2026-06-21 Mixed Mido + Regular Partial-Success Fix
+
+- Fixed `DownloadManager.download_from_file()` so any failed `mido://` request keeps the overall batch result false, even when the regular URL downloads succeed.
+- Added a no-network regression test for a mixed batch where Mido fails and a regular HTTP download succeeds; the expected result is `False`.
+- Verified with:
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_downloader_post_download.py -q`
+    - Final result: `12 passed in 1.25s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q`
+    - Final result: `21 passed in 1.27s`
+  - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check .`
+    - Final result: `All checks passed!`
