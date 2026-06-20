@@ -71,3 +71,19 @@ Command output summary:
 
 Commits:
 - `abc48db` - `fix: restore downloader batch compatibility`
+
+---
+
+STATUS: fixed
+
+Files changed:
+- `src/os_download/downloader/manager.py`
+- `tests/test_downloader_post_download.py`
+- `.superpowers/sdd/task-4-report.md`
+
+Command summary:
+- `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_downloader_post_download.py -q`
+  - Passed: `5 passed in 0.19s`
+
+Commit hash:
+- `c03122b7942240f4f856fef29a7e04f5cd581696` - `fix: exact-match 416 resume handling`
