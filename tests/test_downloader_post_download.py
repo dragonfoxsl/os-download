@@ -378,6 +378,44 @@ def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Pat
     assert calls == [urls[0], urls[1], urls[0]]
 
 
+def test_download_from_file_skips_failed_file_and_continues_by_default(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    urls = [
+        "https://example.test/fail.iso",
+        "https://example.test/next.iso",
+    ]
+    answers = iter(["", ""])
+    prompts = []
+    calls = []
+
+    def fake_download_file(
+        url: str,
+        filename=None,
+        resume: bool = True,
+        verify: bool = False,
+        decompress: bool = True,
+        progress=None,
+        task_id=None,
+        stop_event=None,
+    ) -> bool:
+        calls.append(url)
+        return url.endswith("next.iso")
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(manager, "download_file", fake_download_file)
+
+    assert not manager.download_from_file("ignored.txt", interactive=True, parallel=1)
+    assert any("Skip this file and continue? [dim](Y/n)[/dim]" in prompt for prompt in prompts)
+    assert calls == urls
+
+
 def test_download_from_file_returns_false_on_partial_failure_without_retry(
     tmp_path: Path, monkeypatch
 ):
@@ -483,6 +521,28 @@ def test_completion_summary_marks_mido_failures_as_errors(tmp_path: Path):
     assert border_style == "red"
     assert title == "✗  Finished with errors"
     assert any("Mido" in line for line in lines)
+
+
+def test_session_layout_sizes_keep_completion_panel_inside_terminal(tmp_path: Path):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    _, _, lines = manager._build_completion_summary(
+        success=8,
+        failed=["https://example.test/fossapup64-9.5.iso"],
+        interrupted=True,
+        mido_failed_count=1,
+        total_bytes=24_772_900_000,
+        elapsed=4076,
+    )
+
+    header_size, body_size, completion_size, footer_size = manager._session_layout_sizes(
+        session_count=11,
+        completion_lines=lines,
+        terminal_height=23,
+    )
+
+    assert header_size + body_size + completion_size + footer_size <= 23
+    assert body_size < 13
+    assert completion_size >= 7
 
 
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):

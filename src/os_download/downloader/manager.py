@@ -292,6 +292,28 @@ class DownloadManager:
 
         return border_style, title, lines
 
+    def _session_layout_sizes(
+        self,
+        session_count: int,
+        completion_lines: Optional[list[str]] = None,
+        terminal_height: Optional[int] = None,
+    ) -> tuple[int, int, int, int]:
+        header_size = 6
+        footer_size = 1
+        body_size = session_count + 2
+        completion_size = 0
+
+        if completion_lines is not None:
+            content_lines = sum(line.count("\n") + 1 for line in completion_lines)
+            completion_size = content_lines + 2
+
+        if terminal_height is None:
+            return header_size, body_size, completion_size, footer_size
+
+        available_body = terminal_height - header_size - completion_size - footer_size
+        body_size = max(3, min(body_size, available_body))
+        return header_size, body_size, completion_size, footer_size
+
     def download_file(
         self,
         url: str,
@@ -530,12 +552,15 @@ class DownloadManager:
                 for url in session_urls
             }
 
-            body_size = len(session_urls) + 2
+            header_size, body_size, _, footer_size = self._session_layout_sizes(
+                len(session_urls),
+                terminal_height=console.height,
+            )
             layout = Layout()
             layout.split_column(
-                Layout(name="header", size=7),
+                Layout(name="header", size=header_size),
                 Layout(name="body", size=body_size),
-                Layout(name="footer", size=1),
+                Layout(name="footer", size=footer_size),
             )
             layout["body"].update(Panel(progress, title="[dim]Files[/]", border_style="dim"))
 
@@ -646,8 +671,10 @@ class DownloadManager:
                             if not ok and interactive and parallel == 1:
                                 should_continue = True
                                 try:
-                                    ans = input("\nContinue? [dim](y/N)[/dim] ").strip().lower()
-                                    if ans not in ("y", "yes"):
+                                    ans = input(
+                                        "\nSkip this file and continue? [dim](Y/n)[/dim] "
+                                    ).strip().lower()
+                                    if ans in ("n", "no"):
                                         should_continue = False
                                 except KeyboardInterrupt:
                                     interrupted = True
@@ -697,12 +724,16 @@ class DownloadManager:
                     elapsed=elapsed,
                 )
 
-                completion_size = 2 + len(lines) + (1 if interrupted else 0)
+                header_size, body_size, completion_size, footer_size = self._session_layout_sizes(
+                    len(session_urls),
+                    completion_lines=lines,
+                    terminal_height=console.height,
+                )
                 layout.split_column(
-                    Layout(name="header", size=7),
+                    Layout(name="header", size=header_size),
                     Layout(name="body", size=body_size),
                     Layout(name="completion", size=completion_size),
-                    Layout(name="footer", size=1),
+                    Layout(name="footer", size=footer_size),
                 )
                 layout["body"].update(Panel(progress, title="[dim]Files[/]", border_style="dim"))
                 layout["completion"].update(
