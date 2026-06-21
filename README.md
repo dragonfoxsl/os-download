@@ -11,6 +11,12 @@
   <img src="https://img.shields.io/badge/Ruff-linted-D7FF64?logo=ruff&logoColor=black" alt="Ruff"/>
 </p>
 
+<p align="center">
+  <a href="https://ko-fi.com/D5X721S5GY">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi"/>
+  </a>
+</p>
+
 <br>
 
 **os-download** is a two-command Python CLI that finds the latest download URL for every major OS ISO and pulls them to disk with resume support, parallel downloads, and checksum verification.
@@ -239,8 +245,6 @@ class MyOSFinder(BaseOSFinder):
 | Project | Role |
 |---|---|
 | [Mido](https://github.com/ElliotKillick/Mido) by [@ElliotKillick](https://github.com/ElliotKillick) | Windows 11 ISO download — Mido replicates Microsoft's JavaScript session-token flow to deliver a direct ISO. os-download clones and invokes it automatically. |
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D5X721S5GY)
 
 ---
 
