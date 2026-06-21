@@ -475,15 +475,14 @@ class DownloadManager:
                 count = len(partial)
                 console.print(
                     f"\n  [yellow]Found {count} file{'s' if count != 1 else ''} from a previous session.[/yellow]"
-                    "  [bold]R[/bold]esume / [bold]s[/bold]tart from scratch?"
-                    "  [dim](Enter = resume)[/dim]  ",
+                    "  Resume previous partial downloads? [dim](Y/n)[/dim]  ",
                     end="",
                 )
                 try:
                     ans = input().strip().lower()
                 except (EOFError, KeyboardInterrupt):
                     ans = ""
-                if ans in ("s", "scratch", "n", "no"):
+                if ans in ("n", "no"):
                     resume = False
 
         urls_to_try = [url for url in urls if url not in urls_to_skip]

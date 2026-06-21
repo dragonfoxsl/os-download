@@ -314,7 +314,8 @@ def test_download_from_file_can_restart_older_partial_files_from_scratch(
     old = time.time() - (2 * 86400)
     os.utime(filepath, (old, old))
 
-    prompts = iter(["s"])
+    prompts = iter(["n"])
+    printed = []
     calls = []
 
     def fake_download_file(
@@ -331,10 +332,18 @@ def test_download_from_file_can_restart_older_partial_files_from_scratch(
         return True
 
     monkeypatch.setattr("builtins.input", lambda *args: next(prompts))
+    monkeypatch.setattr(
+        "os_download.downloader.manager.console.print",
+        lambda *args, **kwargs: printed.append("".join(str(arg) for arg in args)),
+    )
     monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
     monkeypatch.setattr(manager, "download_file", fake_download_file)
 
     assert manager.download_from_file("ignored.txt", resume=True, interactive=True, parallel=1)
+    assert any(
+        "Resume previous partial downloads?" in prompt and "(Y/n)" in prompt
+        for prompt in printed
+    )
     assert calls == [(url, False)]
 
 
