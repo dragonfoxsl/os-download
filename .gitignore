@@ -9,6 +9,7 @@ env/
 dist/
 build/
 .python-version
+node_modules/
 
 # Generated output files
 all_os_links.txt
