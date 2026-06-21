@@ -38,7 +38,12 @@ def download_with_mido(variant: str, download_dir: Path) -> bool:
     console.print(f"\n[bold cyan]Mido -> {variant}[/bold cyan]")
     logger.info("MIDO START  %s", variant)
     try:
-        result = subprocess.run(["bash", str(script), variant], cwd=str(download_dir))
+        result = subprocess.run(
+            ["bash", str(script), variant],
+            cwd=str(download_dir),
+            capture_output=True,
+            text=True,
+        )
     except Exception as exc:
         console.print(f"[red]Mido error: {exc}[/]")
         logger.error("MIDO ERROR  %s  -  %s", variant, exc)
@@ -47,5 +52,13 @@ def download_with_mido(variant: str, download_dir: Path) -> bool:
     if result.returncode == 0:
         logger.info("MIDO DONE  %s", variant)
         return True
+    console.print(
+        f"[yellow]Warning:[/] Mido failed for {variant}. "
+        "Microsoft may have changed or blocked the download flow; try again later."
+    )
     logger.error("MIDO FAILED  %s  rc=%d", variant, result.returncode)
+    if result.stdout:
+        logger.debug("MIDO STDOUT  %s\n%s", variant, result.stdout)
+    if result.stderr:
+        logger.debug("MIDO STDERR  %s\n%s", variant, result.stderr)
     return False
