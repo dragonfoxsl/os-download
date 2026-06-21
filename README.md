@@ -2,6 +2,15 @@
   <img src="assets/logo.svg" alt="os-download" width="520"/>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9+"/>
+  <img src="https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=python&logoColor=white" alt="uv package manager"/>
+  <img src="https://img.shields.io/badge/requests-HTTP-20232A" alt="requests"/>
+  <img src="https://img.shields.io/badge/Rich-terminal%20UI-0F766E" alt="Rich terminal UI"/>
+  <img src="https://img.shields.io/badge/pytest-tested-0A9EDC?logo=pytest&logoColor=white" alt="pytest"/>
+  <img src="https://img.shields.io/badge/Ruff-linted-D7FF64?logo=ruff&logoColor=black" alt="Ruff"/>
+</p>
+
 <br>
 
 **os-download** is a two-command Python CLI that finds the latest download URL for every major OS ISO and pulls them to disk with resume support, parallel downloads, and checksum verification.
@@ -230,17 +239,6 @@ class MyOSFinder(BaseOSFinder):
 | Project | Role |
 |---|---|
 | [Mido](https://github.com/ElliotKillick/Mido) by [@ElliotKillick](https://github.com/ElliotKillick) | Windows 11 ISO download — Mido replicates Microsoft's JavaScript session-token flow to deliver a direct ISO. os-download clones and invokes it automatically. |
-
----
-
-## Built with
-
-![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
-![uv](https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=python&logoColor=white)
-![requests](https://img.shields.io/badge/requests-HTTP-20232A)
-![Rich](https://img.shields.io/badge/Rich-terminal%20UI-0F766E)
-![pytest](https://img.shields.io/badge/pytest-tested-0A9EDC?logo=pytest&logoColor=white)
-![Ruff](https://img.shields.io/badge/Ruff-linted-D7FF64?logo=ruff&logoColor=black)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D5X721S5GY)
 
