@@ -140,6 +140,17 @@ On completion the dashboard transitions to a summary panel showing files downloa
 
 At startup, if partial files are detected you are prompted to resume or start from scratch. Files downloaded within the last 24 hours are listed and can be skipped.
 
+### Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/download-dashboard-interrupted.png" alt="os-download live dashboard showing completed, queued, and interrupted downloads" width="900"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/os-finder-help.svg" alt="os-finder command help" width="48%"/>
+  <img src="assets/screenshots/os-download-help.svg" alt="os-download command help" width="48%"/>
+</p>
+
 ---
 
 ## All flags
