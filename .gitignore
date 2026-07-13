@@ -22,3 +22,7 @@ downloads/*
 # Agent working notes: plans, specs and task reports. Local scratch, not project docs.
 .superpowers/
 docs/superpowers/
+
+# Per-machine agent settings, and the temp files they write while saving
+.claude/settings.local.json
+.claude/*.tmp.*
