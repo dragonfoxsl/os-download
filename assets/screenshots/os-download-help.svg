@@ -1,35 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="600" viewBox="0 0 980 600">
-<rect width="980" height="600" rx="14" fill="#1e1e2e"/>
-<rect x="0" y="0" width="980" height="42" rx="14" fill="#181825"/>
-<path d="M0 28 Q0 42 14 42 H966 Q980 42 980 28 V42 H0 Z" fill="#181825"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="704" viewBox="0 0 864 704">
+<rect width="864" height="704" rx="14" fill="#1e1e2e"/>
+<rect x="0" y="0" width="864" height="42" rx="14" fill="#181825"/>
+<path d="M0 28 Q0 42 14 42 H850 Q864 42 864 28 V42 H0 Z" fill="#181825"/>
 <circle cx="24" cy="21" r="6" fill="#f38ba8"/>
 <circle cx="46" cy="21" r="6" fill="#f9e2af"/>
 <circle cx="68" cy="21" r="6" fill="#a6e3a1"/>
-<text x="490" y="26" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#7f849c">os-download --help</text>
+<text x="432" y="26" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600" fill="#7f849c">os-download --help</text>
 <text x="24" y="64" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#a6e3a1">$ os-download --help</text>
-<text x="24" y="92" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">usage: os-download [-h] [--file FILE] [--url URL] [--output OUTPUT]</text>
-<text x="24" y="112" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                   [--dir DIR] [--no-resume] [--no-interactive] [--verify]</text>
-<text x="24" y="132" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                   [--no-decompress] [--parallel N] [--chunk-size CHUNK_SIZE]</text>
-<text x="24" y="152" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                   [--log FILE]</text>
-<text x="24" y="172" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4"></text>
-<text x="24" y="192" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">OS ISO Download Manager</text>
-<text x="24" y="212" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4"></text>
-<text x="24" y="232" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">options:</text>
-<text x="24" y="252" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  -h, --help            show this help message and exit</text>
-<text x="24" y="272" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --file FILE, -f FILE  File containing URLs to download (default: ./os-</text>
-<text x="24" y="292" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                        links/all_os.txt)</text>
-<text x="24" y="312" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --url URL, -u URL     Single URL to download</text>
-<text x="24" y="332" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --output OUTPUT, -o OUTPUT</text>
-<text x="24" y="352" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                        Output filename (single URL only)</text>
-<text x="24" y="372" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --dir DIR, -d DIR     Download directory (default:</text>
-<text x="24" y="392" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                        /home/bisina/Downloads/os-isos)</text>
-<text x="24" y="412" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --no-resume           Disable resume</text>
-<text x="24" y="432" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --no-interactive      Do not prompt to continue after a failed download</text>
-<text x="24" y="452" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --verify              Verify SHA256 checksum after each download</text>
-<text x="24" y="472" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --no-decompress       Skip automatic decompression of .bz2/.gz files</text>
-<text x="24" y="492" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --parallel N          Number of simultaneous downloads (default: 1)</text>
-<text x="24" y="512" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --chunk-size CHUNK_SIZE</text>
-<text x="24" y="532" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">                        Download chunk size in bytes (default: 8192)</text>
-<text x="24" y="552" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4">  --log FILE            Write log to FILE (default: ./logs/os-download.log)</text>
-<rect x="0.5" y="0.5" width="979" height="599" rx="14" fill="none" stroke="#45475a"/>
+<text x="24" y="92" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">usage: os-download [-h] [--version] [--file FILE] [--url URL] [--output OUTPUT] [--dir DIR]</text>
+<text x="24" y="112" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                   [--no-resume] [--no-interactive] [--no-verify] [--require-signature]</text>
+<text x="24" y="132" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                   [--no-decompress] [--parallel N] [--backend {auto,aria2,python}]</text>
+<text x="24" y="152" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                   [--connections N] [--retries N] [--chunk-size CHUNK_SIZE] [--log FILE]</text>
+<text x="24" y="172" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve"></text>
+<text x="24" y="192" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">OS ISO Download Manager</text>
+<text x="24" y="212" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve"></text>
+<text x="24" y="232" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">options:</text>
+<text x="24" y="252" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  -h, --help            show this help message and exit</text>
+<text x="24" y="272" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --version             show program's version number and exit</text>
+<text x="24" y="292" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --file FILE, -f FILE  File containing URLs to download (default: ./os-links/all_os.txt)</text>
+<text x="24" y="312" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --url URL, -u URL     Single URL to download</text>
+<text x="24" y="332" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --output OUTPUT, -o OUTPUT</text>
+<text x="24" y="352" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                        Output filename (single URL only)</text>
+<text x="24" y="372" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --dir DIR, -d DIR     Download directory (default: /home/user/Downloads/os-isos)</text>
+<text x="24" y="392" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --no-resume           Disable resume</text>
+<text x="24" y="412" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --no-interactive      Do not prompt to continue after a failed download</text>
+<text x="24" y="432" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --no-verify           Skip SHA256 checksum verification (verification is on by default)</text>
+<text x="24" y="452" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --require-signature   Fail a download unless its checksum file carries a valid signature from a</text>
+<text x="24" y="472" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                        pinned distribution key (by default an unsigned checksum only warns)</text>
+<text x="24" y="492" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --no-decompress       Skip automatic decompression of .bz2/.gz files</text>
+<text x="24" y="512" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --parallel N          Number of simultaneous downloads (default: 1)</text>
+<text x="24" y="532" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --backend {auto,aria2,python}</text>
+<text x="24" y="552" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                        Download backend. 'auto' uses aria2c for multi-connection downloads when</text>
+<text x="24" y="572" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                        it is installed and falls back to the built-in one (default: auto)</text>
+<text x="24" y="592" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --connections N       Connections per file when using aria2c (default: 8)</text>
+<text x="24" y="612" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --retries N           Attempts per file before giving up; a retry resumes (default: 3)</text>
+<text x="24" y="632" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --chunk-size CHUNK_SIZE</text>
+<text x="24" y="652" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">                        Download chunk size in bytes (default: 8192)</text>
+<text x="24" y="672" font-family="JetBrains Mono, Consolas, monospace" font-size="14" fill="#cdd6f4" xml:space="preserve">  --log FILE            Write log to FILE (default: ./logs/os-download.log)</text>
 </svg>

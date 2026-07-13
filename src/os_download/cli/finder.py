@@ -95,7 +95,11 @@ def main() -> None:
         nargs="+",
         choices=OS_CHOICES,
         default=["all"],
-        help="Operating systems to find download links for",
+        # Without a metavar, argparse prints the whole choice list twice and the help runs
+        # to 250 columns.
+        metavar="OS",
+        help="Operating systems to resolve (default: all). One or more of: "
+        + ", ".join(OS_CHOICES),
     )
     parser.add_argument(
         "--no-interactive",
