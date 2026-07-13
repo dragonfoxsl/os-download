@@ -37,9 +37,9 @@ def main() -> None:
         help="Do not prompt to continue after a failed download",
     )
     parser.add_argument(
-        "--verify",
+        "--no-verify",
         action="store_true",
-        help="Verify SHA256 checksum after each download",
+        help="Skip SHA256 checksum verification (verification is on by default)",
     )
     parser.add_argument(
         "--no-decompress",
@@ -72,13 +72,14 @@ def main() -> None:
     manager = DownloadManager(download_dir=args.dir, chunk_size=args.chunk_size)
     resume = not args.no_resume
     decompress = not args.no_decompress
+    verify = not args.no_verify
 
     if args.url:
         success = manager.download_file(
             args.url,
             args.output,
             resume=resume,
-            verify=args.verify,
+            verify=verify,
             decompress=decompress,
         )
         sys.exit(0 if success else 1)
@@ -91,7 +92,7 @@ def main() -> None:
     success = manager.download_from_file(
         args.file,
         resume=resume,
-        verify=args.verify,
+        verify=verify,
         decompress=decompress,
         interactive=not args.no_interactive,
         parallel=args.parallel,

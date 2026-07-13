@@ -1,9 +1,9 @@
 [project]
 name = "os-download"
 version = "0.1.0"
-description = "Find and download OS ISO images (Ubuntu, Debian, TrueNAS, OPNsense, and more)"
+description = "Find and download OS ISO images for Ubuntu, Fedora, openSUSE, Arch, Linux Mint, Rocky Linux, Windows 11, and more"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.25.0",
     "rich>=13.0.0",
@@ -29,7 +29,7 @@ pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

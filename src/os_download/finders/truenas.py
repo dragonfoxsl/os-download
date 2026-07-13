@@ -22,7 +22,8 @@ class TrueNASFinder(BaseOSFinder):
             response.raise_for_status()
             tag = response.json().get("tag_name", "")
             version = tag.replace("TrueNAS-SCALE-", "").strip() or None
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         if not version:

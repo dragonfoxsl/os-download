@@ -1,7 +1,11 @@
+import hashlib
 import os
 import platform
+import re
 from pathlib import Path
 from urllib.parse import urlparse
+
+_UNSAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def default_download_dir() -> Path:
@@ -16,7 +20,8 @@ def default_download_dir() -> Path:
 
 
 def filename_from_url(url: str) -> str:
-    filename = os.path.basename(urlparse(url).path)
+    filename = _UNSAFE_CHARS_RE.sub("_", os.path.basename(urlparse(url).path)).lstrip(".")
     if not filename or "." not in filename:
-        filename = f"download_{url[-8:]}.bin"
+        digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
+        filename = f"download_{digest}.bin"
     return filename

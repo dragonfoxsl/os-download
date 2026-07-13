@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9+"/>
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+"/>
   <img src="https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=python&logoColor=white" alt="uv package manager"/>
   <img src="https://img.shields.io/badge/requests-HTTP-20232A" alt="requests"/>
   <img src="https://img.shields.io/badge/Rich-terminal%20UI-0F766E" alt="Rich terminal UI"/>
@@ -19,7 +19,7 @@
 
 <br>
 
-**os-download** is a two-command Python CLI that finds the latest download URL for every major OS ISO and pulls them to disk with resume support, parallel downloads, and checksum verification.
+**os-download** is a two-command Python CLI that finds the latest download URL for 15 popular OS ISO families and pulls them to disk with resume support, parallel downloads, and checksum verification.
 
 ```bash
 os-finder          # resolve latest ISO URLs for all supported OSes
@@ -42,6 +42,11 @@ os-download        # download everything that was found
 | **MX Linux** | mxlinux.org / SourceForge | Yes (Xfce x64) | `.iso` | |
 | **Puppy Linux** | SourceForge CDN → ibiblio fallback | Yes (fossapup64) | `.iso` | |
 | **CachyOS** | mirror.cachyos.org | Yes | `.iso` | `.sha256` |
+| **Fedora** | fedoraproject.org mirrors | Yes (Workstation + Server) | `.iso` | |
+| **openSUSE Tumbleweed** | download.opensuse.org | Yes (Current) | `.iso` | `.sha256` |
+| **Arch Linux** | geo.mirror.pkgbuild.com | Yes (latest alias) | `.iso` | `sha256sums.txt` |
+| **Linux Mint** | kernel.org Linux Mint mirror | Yes (Cinnamon x64) | `.iso` | |
+| **Rocky Linux** | download.rockylinux.org | Yes (latest major x86_64) | `.iso` | |
 
 > **Windows 11** — Microsoft's ISO download requires a JavaScript session-token flow that cannot be replicated with plain HTTP. os-download delegates this to [Mido](https://github.com/ElliotKillick/Mido), which is cloned automatically on first use.
 
@@ -100,7 +105,7 @@ uv run os-download
 os-finder
 
 # Specific OSes
-os-finder --os ubuntu debian cachyos mxlinux
+os-finder --os ubuntu fedora opensuse arch linuxmint rocky
 
 # Save URLs to a custom path
 os-finder --output ~/isos/urls.txt
@@ -121,8 +126,8 @@ os-download
 # Three simultaneous downloads
 os-download --parallel 3
 
-# Download and verify checksums
-os-download --verify
+# Skip checksum verification (it is on by default)
+os-download --no-verify
 
 # Download to a specific directory
 os-download --dir /mnt/nas/isos
@@ -174,7 +179,7 @@ At startup, if partial files are detected you are prompted to resume or start fr
 
 | Flag | Default | Description |
 |---|---|---|
-| `--os` | `all` | Space-separated list: `ubuntu opnsense pfsense debian truenas windows11 manjaro mxlinux puppy cachyos` |
+| `--os` | `all` | Space-separated list: `ubuntu opnsense pfsense debian truenas windows11 manjaro mxlinux puppy cachyos fedora opensuse arch linuxmint rocky` |
 | `--output` | `./os-links/all_os.txt` | Output file for resolved ISO URLs |
 | `--timeout` | `15` | HTTP timeout in seconds |
 | `--no-interactive` | off | Skip manual override prompt when a URL cannot be found |
@@ -189,7 +194,7 @@ At startup, if partial files are detected you are prompted to resume or start fr
 | `--url` / `-u` | | Download a single URL |
 | `--dir` / `-d` | `~/Downloads/os-isos` | Output directory |
 | `--parallel` | `1` | Simultaneous downloads |
-| `--verify` | off | SHA256 checksum verification after each download |
+| `--no-verify` | off | Skip SHA256 checksum verification (verification is on by default) |
 | `--no-decompress` | off | Keep `.bz2` / `.gz` files compressed |
 | `--no-resume` | off | Start downloads from the beginning even if partial file exists |
 | `--no-interactive` | off | Fail fast on error without prompting to continue |
@@ -212,7 +217,7 @@ Each finder (BaseOSFinder          Each download
 subclass) is independent:            • streams in chunks
   • scrapes its source               • resumes via Range header
   • verifies the URL                 • decompresses .bz2/.gz
-  • returns {variant: url}           • verifies SHA256 if --verify
+  • returns {variant: url}           • verifies SHA256 by default
                                      • mido:// URIs delegated to Mido
 ```
 

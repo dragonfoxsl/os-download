@@ -38,5 +38,6 @@ class OPNsenseFinder(BaseOSFinder):
             )
             url = version_url + isos[-1]
             return {"amd64": url} if self.verify_download_url(url) else {}
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             return {}

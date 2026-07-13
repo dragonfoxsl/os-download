@@ -20,5 +20,6 @@ class ManjaroKDEFinder(BaseOSFinder):
             if match:
                 return {"kde": match.group(1)}
             return {"download_page": self.download_url}
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             return {"download_page": self.download_url}

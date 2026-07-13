@@ -16,7 +16,7 @@ uv sync
 uv run os-finder
 
 # Run the OS link finder (specific OSes)
-uv run os-finder --os ubuntu debian
+uv run os-finder --os ubuntu fedora opensuse arch linuxmint rocky
 
 # Run the download manager (from default URL file)
 uv run os-download
@@ -24,33 +24,39 @@ uv run os-download
 # Download a single URL
 uv run os-download --url "https://example.com/file.iso"
 
-# Run either script directly (during development)
-uv run python os_download_finder.py --os ubuntu
-uv run python download_manager.py --url "https://example.com/file.iso"
+# Run tests and lint
+uv run pytest -q
+uv run ruff check
 ```
 
-There are no tests or linters configured in this project.
+Tests and linting are configured through `pyproject.toml`.
 
 ## Architecture
 
-Two independent scripts wired up as `uv` entry points via `pyproject.toml`:
+Two package entry points wired through `pyproject.toml`:
 
-**`os_download_finder.py`** — finds ISO download URLs and writes them to `./os-links/all_os.txt`.
-- `BaseOSFinder` is the abstract base class; all per-OS finders subclass it and implement `find_download_links() -> Dict[str, str]`.
-- A module-level `_session` (shared `requests.Session` with retry logic and browser User-Agent) is used by all finders via `self.session`.
-- `MultiOSDownloadFinder` holds the registry mapping CLI keys (`ubuntu`, `opensense`, etc.) to finder instances. Adding a new OS means: create a subclass, register it here, and add it to the argparse choices.
+**`src/os_download/cli/finder.py`** — finds ISO download URLs and writes them to `./os-links/all_os.txt`.
+- `BaseOSFinder` is the abstract base class; all per-OS finders subclass it and implement `find_download_links() -> dict[str, str]`.
+- `self.session` is a thread-local `requests.Session` (`http.get_session()`) with retry logic and a browser User-Agent. `requests.Session` is not thread-safe and finders run concurrently, so never share one across threads.
+- Mirror lookups fail routinely, so finders swallow exceptions — but every handler must call `self.log_failure(exc)` so a mirror layout change is diagnosable from the log instead of silently reporting "not found".
+- `MultiOSDownloadFinder` holds the registry mapping CLI keys (`ubuntu`, `opnsense`, `fedora`, etc.) to finder instances. Adding a new OS means: create a subclass, register it here, and add it to `OS_CHOICES`.
 - URL scraping strategy: each finder tries live web scraping/APIs first, falls back to a hardcoded version pattern, and optionally prompts the user for a manual override URL at runtime (suppressed with `--no-interactive`).
-- Output: `./os-links/all_os.txt` contains one ISO URL per line (no comments); `all_os_links.txt` is a verbose annotated version.
+- Output: `./os-links/all_os.txt` contains one ISO URL per line, grouped under `# <OS name>` comments.
 
-**`download_manager.py`** — reads `./os-links/all_os.txt` and downloads each ISO with progress and resume support.
-- `DownloadManager` handles all download logic. Resume works via HTTP `Range` headers; if the server returns anything other than 206/416 for a range request, it falls back to a full download.
+**`src/os_download/cli/downloader.py`** — reads `./os-links/all_os.txt` and downloads each ISO with progress and resume support.
+- `DownloadManager` (`downloader/manager.py`) owns orchestration only. Resume works via HTTP `Range` headers; if the server returns anything other than 206/416 for a range request, it falls back to a full download. A 403 falls back to `curl`.
+- `downloader/ui.py` owns everything Rich: `SessionDashboard` (layout, header, completion panel) and `SessionState`. Keep display logic out of `manager.py`.
+- `SessionState` counts a file only once its future reports back, so interrupting a session leaves never-started files out of both the success and failure tallies. Don't reintroduce `success = total - failed`.
+- Checksum verification is **on by default** (`--no-verify` to skip). `downloader/checksums.py` handles the several conventions mirrors use: sidecar files, `SHA256SUMS` / `sha256sum.txt` / `CHECKSUM`, GNU and BSD (`SHA256 (name) = hash`) line formats, and scraping the directory index for release-named checksum files (Fedora).
+- A file that fails verification is renamed to `<name>.corrupt`, never left in place — a later resume would otherwise append to corrupt bytes.
 - Default download directory is OS-aware: `~/Downloads/os-isos` on all platforms (respects `XDG_DOWNLOAD_DIR` on Linux).
-- Progress is printed every 2 seconds; the final line is printed after the download completes.
 
-The two scripts are designed to be run sequentially: finder first to populate `./os-links/all_os.txt`, then downloader to fetch the ISOs.
+The two commands are designed to be run sequentially: finder first to populate `./os-links/all_os.txt`, then downloader to fetch the ISOs.
 
 ## OS-specific Notes
 
-- **pfSense / Windows 11**: No direct ISO links available; finder returns a download page URL instead.
+- **Windows 11**: Uses the `mido://win11x64` pseudo-URL and delegates direct ISO resolution to Mido during download. Mido is fetched at the pinned commit in `downloader/mido.py` (`MIDO_COMMIT`), not from the default branch, because `Mido.sh` is executed locally. Bump that constant deliberately; `OS_DOWNLOAD_MIDO_REF` overrides it.
+- **pfSense CE**: Direct ISO is compressed as `.iso.gz`; downloader auto-extracts it unless `--no-decompress` is set.
 - **TrueNAS Scale**: Version-to-codename mapping is hardcoded in `TrueNASFinder.codenames`; update this dict when new major releases ship.
-- **OPNsense**: ISO filename is `.iso.bz2` on some mirror versions — the regex in `OpenSenseFinder` handles both.
+- **OPNsense**: ISO filename is `.iso.bz2` on some mirror versions; downloader auto-extracts it unless `--no-decompress` is set.
+- **Fedora, openSUSE Tumbleweed, Arch Linux, Linux Mint, Rocky Linux**: Supported through direct mirror directory scraping or stable current/latest ISO aliases.

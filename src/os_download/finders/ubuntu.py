@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 from urllib.parse import urljoin
 
 from os_download.finders.base import BaseOSFinder
@@ -11,7 +10,7 @@ class UbuntuFinder(BaseOSFinder):
         self.base_url = "http://releases.ubuntu.com/"
         self.api_url = "https://api.launchpad.net/1.0/ubuntu/series"
 
-    def _get_versions(self) -> tuple[Optional[str], Optional[str]]:
+    def _get_versions(self) -> tuple[str | None, str | None]:
         try:
             response = self.session.get(self.api_url, timeout=self.timeout)
             response.raise_for_status()
@@ -24,7 +23,8 @@ class UbuntuFinder(BaseOSFinder):
                 lts_entries = [entry for entry in supported if "LTS" in entry.get("displayname", "")]
                 lts = lts_entries[-1]["version"] if lts_entries else latest
                 return latest, lts
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         try:
@@ -41,7 +41,8 @@ class UbuntuFinder(BaseOSFinder):
                 ]
                 lts = lts_candidates[-1] if lts_candidates else latest
                 return latest, lts
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         return None, None
@@ -62,7 +63,8 @@ class UbuntuFinder(BaseOSFinder):
                     match = re.search(pattern, response.text, re.IGNORECASE)
                     if match:
                         links[key] = urljoin(base_url, match.group(1))
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
         return links
 

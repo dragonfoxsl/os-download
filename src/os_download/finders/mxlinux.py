@@ -28,7 +28,8 @@ class MXLinuxFinder(BaseOSFinder):
                             f"{paths[0]}"
                         )
                     }
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         return {"download_page": self.sf_final}

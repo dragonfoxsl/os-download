@@ -4,7 +4,31 @@ import threading
 import time
 from pathlib import Path
 
-from os_download.downloader.manager import DownloadManager
+from rich.console import Console
+from rich.progress import Progress
+
+from os_download.downloader.manager import MIN_COMPLETE_BYTES, DownloadManager
+from os_download.downloader.ui import SessionDashboard, SessionState
+
+
+def make_dashboard(
+    urls: list[str],
+    succeeded: list[str] | None = None,
+    failed: list[str] | None = None,
+    interrupted: bool = False,
+    mido_failed: int = 0,
+) -> SessionDashboard:
+    state = SessionState(
+        urls=urls,
+        parallel=1,
+        resume=True,
+        verify=False,
+        succeeded=list(succeeded or []),
+        failed=list(failed or []),
+        interrupted=interrupted,
+        mido_failed=mido_failed,
+    )
+    return SessionDashboard(Console(), Progress(), state)
 
 
 def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, monkeypatch):
@@ -29,6 +53,26 @@ def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, mon
 
     assert calls == [("verify", "image.iso.gz", True)]
     assert (tmp_path / "image.iso").exists()
+
+
+def test_post_download_quarantines_a_file_that_fails_verification(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"corrupt payload")
+
+    monkeypatch.setattr(manager, "verify_checksum", lambda filepath, url: False)
+
+    assert not manager._post_download(
+        iso,
+        "https://example.test/image.iso",
+        verify=True,
+        decompress=True,
+        own_progress=False,
+    )
+
+    # Left in place, a resume would append to the corrupt bytes and never recover.
+    assert not iso.exists()
+    assert (tmp_path / "image.iso.corrupt").read_bytes() == b"corrupt payload"
 
 
 def test_download_file_treats_416_resume_as_complete_when_local_size_matches_server(
@@ -291,7 +335,7 @@ def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Pa
     manager = DownloadManager(download_dir=str(tmp_path))
     url = "https://example.test/recent.iso"
     filepath = tmp_path / "recent.iso"
-    filepath.write_bytes(b"complete")
+    filepath.write_bytes(b"x" * MIN_COMPLETE_BYTES)
 
     monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
     monkeypatch.setattr("builtins.input", lambda *args: "")
@@ -302,6 +346,27 @@ def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Pa
     )
 
     assert manager.download_from_file("ignored.txt", interactive=True, parallel=1)
+
+
+def test_download_from_file_does_not_treat_tiny_file_as_a_completed_download(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    url = "https://example.test/recent.iso"
+    # What a mirror's HTML error page looks like on disk: recent, non-empty, far too small.
+    (tmp_path / "recent.iso").write_bytes(b"<html>404 Not Found</html>")
+    calls = []
+
+    monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
+    monkeypatch.setattr("builtins.input", lambda *args: "")
+    monkeypatch.setattr(
+        manager,
+        "download_file",
+        lambda url, *args, **kwargs: (calls.append(url), True)[1],
+    )
+
+    assert manager.download_from_file("ignored.txt", interactive=True, parallel=1)
+    assert calls == [url]
 
 
 def test_download_from_file_can_restart_older_partial_files_from_scratch(
@@ -506,36 +571,32 @@ def test_download_from_file_returns_false_when_mido_fails_and_regular_downloads_
     assert calls == [("mido", "fail-variant"), ("regular", "https://example.test/ok.iso")]
 
 
-def test_completion_summary_marks_mido_failures_as_errors(tmp_path: Path):
-    manager = DownloadManager(download_dir=str(tmp_path))
-
-    border_style, title, lines = manager._build_completion_summary(
-        success=1,
-        failed=[],
-        interrupted=False,
-        mido_failed_count=1,
-        total_bytes=1024,
-        elapsed=12.3,
+def test_completion_summary_marks_mido_failures_as_errors():
+    dashboard = make_dashboard(
+        urls=["https://example.test/ok.iso"],
+        succeeded=["https://example.test/ok.iso"],
+        mido_failed=1,
     )
+
+    border_style, title, lines = dashboard.completion_summary()
 
     assert border_style == "red"
     assert title == "✗  Finished with errors"
     assert any("Mido" in line for line in lines)
 
 
-def test_session_layout_sizes_keep_completion_panel_inside_terminal(tmp_path: Path):
-    manager = DownloadManager(download_dir=str(tmp_path))
-    _, _, lines = manager._build_completion_summary(
-        success=8,
+def test_session_layout_sizes_keep_completion_panel_inside_terminal():
+    urls = [f"https://example.test/file-{index}.iso" for index in range(11)]
+    dashboard = make_dashboard(
+        urls=urls,
+        succeeded=urls[:8],
         failed=["https://example.test/fossapup64-9.5.iso"],
         interrupted=True,
-        mido_failed_count=1,
-        total_bytes=24_772_900_000,
-        elapsed=4076,
+        mido_failed=1,
     )
+    _, _, lines = dashboard.completion_summary()
 
-    header_size, body_size, completion_size, footer_size = manager._session_layout_sizes(
-        session_count=11,
+    header_size, body_size, completion_size, footer_size = dashboard.layout_sizes(
         completion_lines=lines,
         terminal_height=23,
     )
@@ -543,6 +604,17 @@ def test_session_layout_sizes_keep_completion_panel_inside_terminal(tmp_path: Pa
     assert header_size + body_size + completion_size + footer_size <= 23
     assert body_size < 13
     assert completion_size >= 7
+
+
+def test_completion_summary_does_not_count_unstarted_files_as_downloaded():
+    urls = [f"https://example.test/file-{index}.iso" for index in range(10)]
+    dashboard = make_dashboard(urls=urls, succeeded=urls[:1], interrupted=True)
+
+    _, title, lines = dashboard.completion_summary()
+
+    assert title == "⏸  Interrupted"
+    assert "[green]1[/green] downloaded" in lines[0]
+    assert "9 not started" in lines[0]
 
 
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
@@ -569,7 +641,7 @@ def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: P
         saw_stop_event.append(stop_event.is_set())
         return False
 
-    monkeypatch.setattr("os_download.downloader.manager._keyboard_listener", fake_keyboard_listener)
+    monkeypatch.setattr("os_download.downloader.manager.keyboard_listener", fake_keyboard_listener)
     monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
     monkeypatch.setattr(manager, "download_file", fake_download_file)
 

@@ -3,19 +3,23 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import redirect_stdout
-from typing import Optional
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from os_download.finders.base import BaseOSFinder, has_iso_link
+from os_download.finders.arch import ArchLinuxFinder
+from os_download.finders.base import ISO_EXTS, BaseOSFinder, has_iso_link
 from os_download.finders.cachyos import CachyOSFinder
 from os_download.finders.debian import DebianFinder
+from os_download.finders.fedora import FedoraFinder
+from os_download.finders.linuxmint import LinuxMintFinder
 from os_download.finders.manjaro import ManjaroKDEFinder
 from os_download.finders.mxlinux import MXLinuxFinder
+from os_download.finders.opensuse import OpenSUSETumbleweedFinder
 from os_download.finders.opnsense import OPNsenseFinder
 from os_download.finders.pfsense import PfSenseFinder
 from os_download.finders.puppy import PuppyLinuxFinder
+from os_download.finders.rocky import RockyLinuxFinder
 from os_download.finders.truenas import TrueNASFinder
 from os_download.finders.ubuntu import UbuntuFinder
 from os_download.finders.windows import Windows11Finder
@@ -34,11 +38,16 @@ OS_CHOICES = [
     "mxlinux",
     "puppy",
     "cachyos",
+    "fedora",
+    "opensuse",
+    "arch",
+    "linuxmint",
+    "rocky",
     "all",
 ]
 
 
-def prompt_override_url(os_name: str, session) -> Optional[str]:
+def prompt_override_url(os_name: str, session) -> str | None:
     console.print(f"\n[yellow]No direct ISO found for {os_name}.[/]")
     try:
         url = input("   Enter an override URL (or press Enter to skip): ").strip()
@@ -87,11 +96,16 @@ class MultiOSDownloadFinder:
             "mxlinux": MXLinuxFinder(timeout),
             "puppy": PuppyLinuxFinder(timeout),
             "cachyos": CachyOSFinder(timeout),
+            "fedora": FedoraFinder(timeout),
+            "opensuse": OpenSUSETumbleweedFinder(timeout),
+            "arch": ArchLinuxFinder(timeout),
+            "linuxmint": LinuxMintFinder(timeout),
+            "rocky": RockyLinuxFinder(timeout),
         }
 
     def find_all_links(
         self,
-        os_list: Optional[list[str]] = None,
+        os_list: list[str] | None = None,
         interactive: bool = True,
         quiet: bool = False,
     ) -> dict[str, dict[str, str]]:
@@ -176,11 +190,23 @@ class MultiOSDownloadFinder:
         output_path: str = "./os-links/all_os.txt",
     ) -> None:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        written: set[str] = set()
+        count = 0
         with open(output_path, "w", encoding="utf-8") as output:
-            for links in all_links.values():
-                for url in links.values():
-                    if url.lower().endswith((".iso", ".iso.bz2", ".iso.gz")) or url.startswith(
-                        "mido://"
-                    ):
-                        output.write(f"{url}\n")
-        console.print(f"[green]ISO links saved to:[/] {output_path}")
+            for os_name, links in all_links.items():
+                downloadable = [
+                    url
+                    for url in links.values()
+                    if (url.lower().endswith(ISO_EXTS) or url.startswith("mido://"))
+                    and url not in written
+                ]
+                if not downloadable:
+                    continue
+                display_name = self.finders[os_name].name if os_name in self.finders else os_name
+                output.write(f"# {display_name}\n")
+                for url in downloadable:
+                    written.add(url)
+                    count += 1
+                    output.write(f"{url}\n")
+                output.write("\n")
+        console.print(f"[green]{count} ISO links saved to:[/] {output_path}")

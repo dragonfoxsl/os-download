@@ -19,5 +19,6 @@ class PfSenseFinder(BaseOSFinder):
             filename = isos[-1][0]
             url = self.cdn_url + filename
             return {"amd64": url}
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             return {"download_page": "https://www.pfsense.org/download/"}

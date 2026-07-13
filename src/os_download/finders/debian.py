@@ -22,7 +22,8 @@ class DebianFinder(BaseOSFinder):
                         "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/"
                         f"{match.group(1)}"
                     )
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         try:
@@ -37,7 +38,8 @@ class DebianFinder(BaseOSFinder):
                         "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/"
                         f"{match.group(1)}"
                     )
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             pass
 
         verified = {}

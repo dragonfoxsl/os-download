@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from os_download.downloader.checksums import verify_checksum
+from os_download.downloader.checksums import hash_file, verify_checksum
 
 
 class FakeResponse:
@@ -60,3 +60,66 @@ def test_verify_checksum_returns_none_when_no_checksum_exists(tmp_path: Path):
     session = FakeSession({})
 
     assert verify_checksum(session, file_path, "https://example.test/unknown.iso") is None
+
+
+def test_verify_checksum_reads_fedora_style_bsd_checksum_named_after_the_release(tmp_path: Path):
+    file_path = tmp_path / "Fedora-Workstation-42-x86_64.iso"
+    file_path.write_bytes(b"fedora")
+    digest = hash_file(file_path)
+    session = FakeSession(
+        {
+            "https://example.test/iso/": FakeResponse(
+                200, '<a href="Fedora-Workstation-42-1.1-x86_64-CHECKSUM">CHECKSUM</a>'
+            ),
+            "https://example.test/iso/Fedora-Workstation-42-1.1-x86_64-CHECKSUM": FakeResponse(
+                200,
+                "# Fedora-Workstation-42-x86_64.iso: 2147483648 bytes\n"
+                f"SHA256 (Fedora-Workstation-42-x86_64.iso) = {digest}\n",
+            ),
+        }
+    )
+
+    url = "https://example.test/iso/Fedora-Workstation-42-x86_64.iso"
+    assert verify_checksum(session, file_path, url) is True
+
+
+def test_verify_checksum_reads_linux_mint_style_sha256sum_txt(tmp_path: Path):
+    file_path = tmp_path / "linuxmint-22-cinnamon-64bit.iso"
+    file_path.write_bytes(b"mint")
+    digest = hash_file(file_path)
+    session = FakeSession(
+        {
+            "https://example.test/sha256sum.txt": FakeResponse(
+                200, f"{digest} *linuxmint-22-cinnamon-64bit.iso\n"
+            )
+        }
+    )
+
+    url = "https://example.test/linuxmint-22-cinnamon-64bit.iso"
+    assert verify_checksum(session, file_path, url) is True
+
+
+def test_verify_checksum_reads_a_sidecar_containing_only_a_bare_hash(tmp_path: Path):
+    file_path = tmp_path / "openSUSE-Tumbleweed.iso"
+    file_path.write_bytes(b"tumbleweed")
+    digest = hash_file(file_path)
+    session = FakeSession(
+        {"https://example.test/openSUSE-Tumbleweed.iso.sha256": FakeResponse(200, f"{digest}\n")}
+    )
+
+    url = "https://example.test/openSUSE-Tumbleweed.iso"
+    assert verify_checksum(session, file_path, url) is True
+
+
+def test_verify_checksum_detects_a_mismatch(tmp_path: Path):
+    file_path = tmp_path / "arch.iso"
+    file_path.write_bytes(b"tampered")
+    session = FakeSession(
+        {
+            "https://example.test/sha256sums.txt": FakeResponse(
+                200, f"{'0' * 64}  arch.iso\n"
+            )
+        }
+    )
+
+    assert verify_checksum(session, file_path, "https://example.test/arch.iso") is False

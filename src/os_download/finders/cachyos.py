@@ -24,5 +24,6 @@ class CachyOSFinder(BaseOSFinder):
                 return {"download_page": "https://cachyos.org/download/"}
 
             return {"desktop": version_url + match.group(1)}
-        except Exception:
+        except Exception as exc:
+            self.log_failure(exc)
             return {"download_page": "https://cachyos.org/download/"}

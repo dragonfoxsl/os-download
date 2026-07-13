@@ -4,7 +4,6 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 from rich.progress import Progress, TaskID
 
@@ -15,15 +14,15 @@ def download_with_curl(
     url,
     filepath,
     resume_pos,
-    progress: Optional[Progress],
-    task_id: Optional[TaskID],
-    stop_event: Optional[threading.Event],
+    progress: Progress | None,
+    task_id: TaskID | None,
+    stop_event: threading.Event | None,
 ) -> bool:
     if shutil.which("curl") is None:
         logger.error("CURL_UNAVAILABLE  %s", url)
         return False
 
-    total_size: Optional[int] = None
+    total_size: int | None = None
     try:
         head = subprocess.run(["curl", "-sIL", url], capture_output=True, text=True, timeout=20)
         for line in reversed(head.stdout.splitlines()):

@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 from urllib.parse import urljoin
 
 from os_download.finders.base import BaseOSFinder
@@ -17,7 +16,7 @@ class PuppyLinuxFinder(BaseOSFinder):
         self.distro_url = "http://distro.ibiblio.org/puppylinux/"
         self.download_url = "http://puppylinux-woof-ce.github.io/woof-CE/index.html#downloads"
 
-    def _try_sourceforge(self) -> Optional[tuple[str, str]]:
+    def _try_sourceforge(self) -> tuple[str, str] | None:
         for project, variant in self.SF_PROJECTS:
             try:
                 response = self.session.get(
@@ -47,7 +46,8 @@ class PuppyLinuxFinder(BaseOSFinder):
                     iso = next((item for item in isos if "64" in item), isos[0])
                     url = f"https://downloads.sourceforge.net/project/{project}/{iso}"
                     return variant, url
-            except Exception:
+            except Exception as exc:
+                self.log_failure(exc)
                 continue
         return None
 
@@ -69,7 +69,8 @@ class PuppyLinuxFinder(BaseOSFinder):
                 iso = next((item for item in isos if "64" in item), isos[0])
                 url = urljoin(dir_url, iso)
                 return {dirname.replace("puppy-", ""): url}
-            except Exception:
+            except Exception as exc:
+                self.log_failure(exc)
                 continue
 
         return {"download_page": self.download_url}
