@@ -1,8 +1,11 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="os-download" width="520"/>
+  <img src="https://raw.githubusercontent.com/dragonfoxsl/os-download/main/assets/logo.png" alt="os-download" width="520"/>
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/os-download/">
+    <img src="https://img.shields.io/pypi/v/os-download?logo=pypi&logoColor=white&color=0073B7" alt="PyPI"/>
+  </a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+"/>
   <img src="https://img.shields.io/badge/uv-package%20manager-DE5FE9?logo=python&logoColor=white" alt="uv package manager"/>
   <img src="https://img.shields.io/badge/requests-HTTP-20232A" alt="requests"/>
@@ -84,19 +87,17 @@ brew install gnupg aria2
 
 ## Installation
 
-### With uv (recommended)
+os-download is on PyPI. Either installer puts `os-finder` and `os-download` on your PATH in an isolated environment, available from any directory.
 
-[uv](https://docs.astral.sh/uv/) installs the tool into an isolated environment and puts `os-finder` and `os-download` on your PATH.
+### With uv (recommended)
 
 ```bash
 # 1. Install uv (skip if you already have it)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Install os-download
-uv tool install git+https://github.com/dragonfoxsl/os-download
+uv tool install os-download
 ```
-
-Both commands are now available from any directory.
 
 ```bash
 # Upgrade to the latest version at any time
@@ -109,7 +110,15 @@ uv tool uninstall os-download
 ### With pipx
 
 ```bash
-pipx install git+https://github.com/dragonfoxsl/os-download
+pipx install os-download
+```
+
+### Bleeding edge
+
+To install the current `main` rather than the latest release:
+
+```bash
+uv tool install git+https://github.com/dragonfoxsl/os-download
 ```
 
 ### Development install
@@ -212,12 +221,12 @@ At startup, if partial files are detected you are prompted to resume or start fr
 ### Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/download-dashboard-interrupted.svg" alt="os-download live dashboard showing completed, queued, and interrupted downloads" width="900"/>
+  <img src="https://raw.githubusercontent.com/dragonfoxsl/os-download/main/assets/screenshots/download-dashboard-interrupted.png" alt="os-download live dashboard showing completed, queued, and interrupted downloads" width="900"/>
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/os-finder-help.svg" alt="os-finder command help" width="48%"/>
-  <img src="assets/screenshots/os-download-help.svg" alt="os-download command help" width="48%"/>
+  <img src="https://raw.githubusercontent.com/dragonfoxsl/os-download/main/assets/screenshots/os-finder-help.png" alt="os-finder command help" width="48%"/>
+  <img src="https://raw.githubusercontent.com/dragonfoxsl/os-download/main/assets/screenshots/os-download-help.png" alt="os-download command help" width="48%"/>
 </p>
 
 ---

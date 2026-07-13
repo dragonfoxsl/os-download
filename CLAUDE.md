@@ -34,9 +34,14 @@ uv run ruff check
 # Regenerate the README images after changing flags or the dashboard
 uv run python scripts/render_help_svg.py        # both --help screenshots
 uv run python scripts/render_dashboard_svg.py   # the download dashboard
+node scripts/svg2png.mjs                        # then rasterise every SVG to PNG
 ```
 
-The README screenshots are generated from the real CLIs and the real `SessionDashboard`, never hand-edited — a hand-edited one silently advertised a `--verify` flag that had been removed. Note that `rsvg-convert` renders Rich's SVG export badly (it collapses the spacing); check them in a browser, which is what GitHub uses.
+The README screenshots are generated from the real CLIs and the real `SessionDashboard`, never hand-edited — a hand-edited one silently advertised a `--verify` flag that had been removed.
+
+**The README must reference images as PNGs at absolute `raw.githubusercontent.com` URLs.** The same README is rendered on PyPI, which has no repo context (so relative paths 404) and where `raw.githubusercontent.com` serves `.svg` as `text/plain` (so SVGs do not draw). The SVGs remain the source of truth; `svg2png.mjs` rasterises them. Note that `rsvg-convert` renders Rich's SVG export badly — it collapses the spacing — so rasterise and check in a browser, which is what GitHub and PyPI use.
+
+The PyPI project page only updates when a new version is uploaded; a README fix on `main` will not appear there until the next release.
 
 Tests and linting are configured through `pyproject.toml`.
 
