@@ -19,36 +19,66 @@
 
 <br>
 
-**os-download** is a two-command Python CLI that finds the latest download URL for 15 popular OS ISO families and pulls them to disk with resume support, parallel downloads, and checksum verification.
+**os-download** is a two-command Python CLI that finds the latest download URL for 15 popular OS ISO families and pulls them to disk — with signature-checked verification, working resume, parallel and multi-connection downloads, and automatic retries.
 
 ```bash
 os-finder          # resolve latest ISO URLs for all supported OSes
-os-download        # download everything that was found
+os-download        # download everything that was found, verifying as it goes
 ```
 
 ---
 
 ## Supported operating systems
 
-| OS | Source | Auto-version | Format | Checksum |
+| OS | Source | Auto-version | Format | Verification |
 |---|---|---|---|---|
-| **Ubuntu** | Launchpad API + releases.ubuntu.com | Yes (LTS + latest) | `.iso` | `SHA256SUMS` |
-| **OPNsense** | pkg.opnsense.org | Yes | `.iso.bz2` (auto-extracted) | |
-| **pfSense CE** | Netgate CDN | Yes | `.iso.gz` (auto-extracted) | `.sha256` |
-| **Debian** | cdimage.debian.org | Yes | `.iso` | |
-| **TrueNAS Scale** | GitHub Releases API | Yes | `.iso` | |
-| **Windows 11** | [Mido](https://github.com/ElliotKillick/Mido) | Yes | `.iso` | |
-| **Manjaro KDE** | manjaro.org/products | Yes | `.iso` | |
-| **MX Linux** | mxlinux.org / SourceForge | Yes (Xfce x64) | `.iso` | |
-| **Puppy Linux** | SourceForge CDN → ibiblio fallback | Yes (fossapup64) | `.iso` | |
-| **CachyOS** | mirror.cachyos.org | Yes | `.iso` | `.sha256` |
-| **Fedora** | fedoraproject.org mirrors | Yes (Workstation + Server) | `.iso` | |
-| **openSUSE Tumbleweed** | download.opensuse.org | Yes (Current) | `.iso` | `.sha256` |
-| **Arch Linux** | geo.mirror.pkgbuild.com | Yes (latest alias) | `.iso` | `sha256sums.txt` |
-| **Linux Mint** | kernel.org Linux Mint mirror | Yes (Cinnamon x64) | `.iso` | |
-| **Rocky Linux** | download.rockylinux.org | Yes (latest major x86_64) | `.iso` | |
+| **Ubuntu** | Launchpad API + releases.ubuntu.com | Yes (LTS + latest) | `.iso` | **Signed** (pinned key) |
+| **Debian** | cdimage.debian.org | Yes | `.iso` | **Signed** (pinned key) |
+| **Linux Mint** | kernel.org Linux Mint mirror | Yes (Cinnamon x64) | `.iso` | **Signed** (pinned key) |
+| **Fedora** | fedoraproject.org mirrors | Yes (Workstation + Server) | `.iso` | **Signed** (distro keyring) |
+| **OPNsense** | pkg.opnsense.org | Yes | `.iso.bz2` (auto-extracted) | SHA256 if published |
+| **pfSense CE** | Netgate CDN | Yes | `.iso.gz` (auto-extracted) | SHA256 |
+| **TrueNAS Scale** | GitHub Releases API | Yes | `.iso` | SHA256 if published |
+| **Manjaro KDE** | manjaro.org/products | Yes | `.iso` | SHA256 if published |
+| **MX Linux** | mxlinux.org / SourceForge | Yes (Xfce x64) | `.iso` | SHA256 if published |
+| **Puppy Linux** | SourceForge CDN → ibiblio fallback | Yes (fossapup64) | `.iso` | SHA256 if published |
+| **CachyOS** | mirror.cachyos.org | Yes | `.iso` | SHA256 |
+| **openSUSE Tumbleweed** | download.opensuse.org | Yes (Current) | `.iso` | SHA256 |
+| **Arch Linux** | geo.mirror.pkgbuild.com | Yes (latest alias) | `.iso` | SHA256 |
+| **Rocky Linux** | download.rockylinux.org | Yes (latest major x86_64) | `.iso` | SHA256 |
+| **Windows 11** | [Mido](https://github.com/ElliotKillick/Mido) | Yes | `.iso` | Handled by Mido |
 
-> **Windows 11** — Microsoft's ISO download requires a JavaScript session-token flow that cannot be replicated with plain HTTP. os-download delegates this to [Mido](https://github.com/ElliotKillick/Mido), which is cloned automatically on first use.
+**Signed** means the checksum file itself is verified against a signing key that os-download pins — a mirror cannot forge it. **SHA256** means the hash is checked, which proves the download is intact but not that the mirror was honest. See [Verification](#verification).
+
+> **Windows 11** — Microsoft's ISO download requires a JavaScript session-token flow that cannot be replicated with plain HTTP. os-download delegates this to [Mido](https://github.com/ElliotKillick/Mido), which is fetched at a pinned commit on first use.
+
+---
+
+## Requirements
+
+- **Python 3.10 or newer** (3.9 and earlier are not supported)
+- Linux, macOS, or Windows
+
+Two optional binaries unlock more, and os-download works without either:
+
+| Binary | Without it |
+|---|---|
+| `gpg` | Signatures cannot be checked; verification falls back to hash-only and says so |
+| `aria2c` | Downloads use a single connection instead of splitting each file across several |
+
+```bash
+# Debian / Ubuntu
+sudo apt install gnupg aria2
+
+# Fedora
+sudo dnf install gnupg2 aria2
+
+# Arch
+sudo pacman -S gnupg aria2
+
+# macOS
+brew install gnupg aria2
+```
 
 ---
 
@@ -115,7 +145,12 @@ os-finder --timeout 30
 
 # Machine-readable JSON output
 os-finder --json
+
+# Check every OS still resolves to an ISO (exits non-zero if a mirror moved)
+os-finder --check
 ```
+
+> Mirrors reorganise their directory layouts, which makes a finder quietly stop resolving. `--check` is the same check a scheduled workflow runs weekly against the live mirrors, so a broken finder surfaces as a GitHub issue rather than a surprise at download time.
 
 ### Step 2: Download
 
@@ -135,6 +170,12 @@ os-download --require-signature
 # Faster: split each file across 16 connections (needs aria2c)
 os-download --connections 16
 
+# Force the built-in backend even if aria2c is installed
+os-download --backend python
+
+# Give up sooner on a flaky link (each retry resumes)
+os-download --retries 1
+
 # Download to a specific directory
 os-download --dir /mnt/nas/isos
 
@@ -144,6 +185,8 @@ os-download --url "https://example.com/file.iso"
 # Skip automatic decompression of .bz2 / .gz files
 os-download --no-decompress
 ```
+
+Interrupted downloads resume where they left off — re-run the same command. A dropped connection is retried automatically without failing the file.
 
 ### Keyboard shortcuts (download dashboard)
 
@@ -220,6 +263,7 @@ hash-only and says so.
 | `--json` | off | Print JSON to stdout, suppress progress display |
 | `--check` | off | Report which OSes still resolve to an ISO; exits non-zero if any do not |
 | `--log` | `./logs/os-finder.log` | Log file path |
+| `--version` | | Print the version and exit |
 
 **`os-download`**
 
@@ -239,6 +283,7 @@ hash-only and says so.
 | `--no-interactive` | off | Fail fast on error without prompting to continue |
 | `--chunk-size` | `8192` | Download chunk size in bytes (built-in backend) |
 | `--log` | `./logs/os-download.log` | Log file path |
+| `--version` | | Print the version and exit |
 
 ---
 
@@ -253,12 +298,15 @@ MultiOSDownloadFinder              DownloadManager
      ThreadPoolExecutor                 via ThreadPoolExecutor
 
 Each finder (BaseOSFinder          Each download
-subclass) is independent:            • streams in chunks
+subclass) is independent:            • aria2c, or streams in chunks
   • scrapes its source               • resumes via Range header
-  • verifies the URL                 • decompresses .bz2/.gz
-  • returns {variant: url}           • verifies SHA256 by default
+  • verifies the URL                 • retries dropped connections
+  • returns {variant: url}           • checks signature, then hash
+                                     • decompresses .bz2/.gz
                                      • mido:// URIs delegated to Mido
 ```
+
+Backends: `aria2c` when installed (several connections per file), the built-in one otherwise, and `curl` as a fallback for mirrors that reject the library outright with a 403.
 
 ### Adding a new OS
 
@@ -269,9 +317,15 @@ class MyOSFinder(BaseOSFinder):
     def __init__(self, timeout: int = 15):
         super().__init__("My OS", timeout)
 
-    def find_download_links(self) -> Dict[str, str]:
-        # fetch, scrape, return {variant: url}
-        return {'amd64': 'https://...'}
+    def find_download_links(self) -> dict[str, str]:
+        try:
+            # fetch, scrape, return {variant: url}
+            return {"amd64": "https://..."}
+        except Exception as exc:
+            # Mirror lookups fail routinely. Log why, or a layout change becomes an
+            # unexplained "not found".
+            self.log_failure(exc)
+            return {}
 ```
 
 2. Register it in `src/os_download/finders/registry.py`:
