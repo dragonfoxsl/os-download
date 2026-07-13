@@ -30,7 +30,13 @@ uv run os-download --url "https://example.com/file.iso"
 # Run tests and lint
 uv run pytest -q
 uv run ruff check
+
+# Regenerate the README images after changing flags or the dashboard
+uv run python scripts/render_help_svg.py        # both --help screenshots
+uv run python scripts/render_dashboard_svg.py   # the download dashboard
 ```
+
+The README screenshots are generated from the real CLIs and the real `SessionDashboard`, never hand-edited — a hand-edited one silently advertised a `--verify` flag that had been removed. Note that `rsvg-convert` renders Rich's SVG export badly (it collapses the spacing); check them in a browser, which is what GitHub uses.
 
 Tests and linting are configured through `pyproject.toml`.
 

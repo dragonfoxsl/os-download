@@ -212,7 +212,7 @@ At startup, if partial files are detected you are prompted to resume or start fr
 ### Screenshots
 
 <p align="center">
-  <img src="assets/screenshots/download-dashboard-interrupted.png" alt="os-download live dashboard showing completed, queued, and interrupted downloads" width="900"/>
+  <img src="assets/screenshots/download-dashboard-interrupted.svg" alt="os-download live dashboard showing completed, queued, and interrupted downloads" width="900"/>
 </p>
 
 <p align="center">

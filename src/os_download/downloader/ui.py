@@ -13,6 +13,15 @@ from rich.table import Table
 from os_download.downloader.paths import filename_from_url
 
 _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
+_MB = 1_048_576
+_GB = 1_073_741_824
+
+
+def format_bytes(total: float) -> str:
+    """ISO sessions run to tens of gigabytes; "11709.0 MB" is not a readable total."""
+    if total >= _GB:
+        return f"{total / _GB:.1f} GB"
+    return f"{total / _MB:.1f} MB"
 
 
 def keyboard_listener(quit_event: threading.Event, stop_event: threading.Event) -> None:
@@ -195,24 +204,29 @@ class SessionDashboard:
         if state.succeeded:
             parts.append(f"[green]✓ {len(state.succeeded)} done[/green]")
         if state.failed:
-            last_name = filename_from_url(state.failed[-1])
-            short = last_name[:24] + "…" if len(last_name) > 25 else last_name
-            parts.append(f"[red]✗ {len(state.failed)} failed[/red] [dim]({short})[/dim]")
+            # Naming the failed file here crowds out the counts on a narrow terminal, and
+            # the completion panel lists every failure by name anyway.
+            parts.append(f"[red]✗ {len(state.failed)} failed[/red]")
         if waiting > 0:
             parts.append(f"[dim]○ {waiting} queued[/dim]")
 
         status = "  ".join(parts) if parts else "[dim]preparing…[/dim]"
-        file_cell = f"{status}  [dim]·  {state.done_count}/{total_files}  {pct}%[/dim]"
+        # Counts first: on a narrow terminal the tail of this cell is ellipsised, and
+        # "4/8 50%" is what the user is actually looking for.
+        file_cell = f"[dim]{state.done_count}/{total_files}  {pct}%[/dim]  [dim]·[/dim]  {status}"
 
         grid = Table.grid(expand=True, padding=(0, 3))
-        grid.add_column(style="bold dim", min_width=14)
-        grid.add_column(min_width=24)
-        grid.add_column(style="bold dim", min_width=10)
-        grid.add_column()
+        grid.add_column(style="bold dim", width=12, no_wrap=True)
+        # The header panel is a fixed 6 lines. Left to wrap, this cell pushes the
+        # Downloaded/Speed row out of it on a ~100-column terminal, so it flexes and
+        # ellipsises instead. The trailing columns are fixed so it cannot crowd them out.
+        grid.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
+        grid.add_column(style="bold dim", width=8, no_wrap=True)
+        grid.add_column(width=24, no_wrap=True, overflow="ellipsis")
         grid.add_row("Files", file_cell, "Elapsed", f"{minutes:02d}:{seconds:02d}")
         grid.add_row(
             "Downloaded",
-            f"[cyan]{total_bytes / 1_048_576:.1f} MB[/cyan]",
+            f"[cyan]{format_bytes(total_bytes)}[/cyan]",
             "Speed",
             self._speed_sparkline(),
         )
@@ -268,7 +282,7 @@ class SessionDashboard:
 
         lines = [
             files_line,
-            f"  [bold]Data[/bold]        {self._total_bytes() / 1_048_576:.1f} MB",
+            f"  [bold]Data[/bold]        {format_bytes(self._total_bytes())}",
             f"  [bold]Time[/bold]        {minutes:02d}:{seconds:02d}",
         ]
         if state.interrupted:
