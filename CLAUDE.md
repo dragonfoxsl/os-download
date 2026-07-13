@@ -6,6 +6,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Do not mention Claude or add any `Co-Authored-By: Claude` lines in commit messages.
 
+## Releasing
+
+When a release or a version bump is requested — "tag v0.2.0", "release 0.1.2", "cut a
+release" — do all of this, not just the tag:
+
+1. **Bump the version in both places.** `pyproject.toml` (`version =`) and
+   `src/os_download/__init__.py` (`__version__`). The release workflow compares the tag
+   against `__version__` and aborts on a mismatch, so a tag alone publishes nothing.
+2. **Update the README to match what shipped.** Any new or renamed flag belongs in the flag
+   tables and, where it changes how the tool is used, in the usage examples. Cross-check the
+   tables against `--help` for both CLIs — the README has drifted before, advertising a
+   `--verify` flag that no longer existed.
+3. **Regenerate the images** if flags or the dashboard changed (see the commands above), then
+   rasterise to PNG.
+4. **Verify before tagging:** `uv run ruff check`, `uv run pytest -q`, and `uv build`.
+5. **Tag and push:** an annotated tag `vX.Y.Z` matching the version, then
+   `git push origin vX.Y.Z`.
+
+Pushing the tag is what publishes to PyPI, via the release workflow and a Trusted Publisher
+(OIDC — no API token exists). A published version is permanent: it can be yanked but never
+re-uploaded, so get the README right *before* tagging. The PyPI project page is baked in at
+upload time and will not pick up a later README fix without a new release — that is what
+0.1.1 existed to do.
+
 ## Commands
 
 ```bash

@@ -45,7 +45,9 @@
       "Bash(./verify-install/bin/os-download --version)",
       "Bash(./verify-install/bin/os-finder --version)",
       "Bash(./verify-install/bin/os-finder --check --os arch --no-interactive)",
-      "Bash(git tag -a v0.1.1 -m 'os-download 0.1.1 *)"
+      "Bash(git tag -a v0.1.1 -m 'os-download 0.1.1 *)",
+      "Bash(grep -oE 'v0\\\\.1\\\\.[0-9]+$')",
+      "Bash(git tag -a v0.1.2 -m 'os-download 0.1.2 *)"
     ]
   }
 }

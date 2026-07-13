@@ -345,6 +345,30 @@ class MyOSFinder(BaseOSFinder):
 
 3. Add `'myos'` to `OS_CHOICES` so `src/os_download/cli/finder.py` exposes it through `--os`.
 
+### Releasing
+
+Pushing a `vX.Y.Z` tag publishes to PyPI. The workflow authenticates with a [Trusted Publisher](https://docs.pypi.org/trusted-publishers/) over OIDC, so no API token is stored anywhere.
+
+```bash
+# 1. Bump the version in BOTH places — the workflow aborts if the tag does not match
+#    pyproject.toml            version = "0.1.2"
+#    src/os_download/__init__.py   __version__ = "0.1.2"
+
+# 2. Update the README for anything user-facing (flags, defaults, behaviour), and
+#    regenerate the screenshots if the CLI or dashboard changed
+uv run python scripts/render_help_svg.py
+uv run python scripts/render_dashboard_svg.py
+node scripts/svg2png.mjs
+
+# 3. Verify
+uv run ruff check && uv run pytest -q && uv build
+
+# 4. Tag and push
+git tag -a v0.1.2 -m "os-download 0.1.2" && git push origin v0.1.2
+```
+
+Get the README right *before* tagging: the PyPI project page is baked in at upload time, so a later README fix will not appear there without a new release. A published version can be yanked but never re-uploaded.
+
 ---
 
 ## Credits
