@@ -16,26 +16,48 @@ _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 
 
 def keyboard_listener(quit_event: threading.Event, stop_event: threading.Event) -> None:
+    """Watch for 'q'. The footer advertises it, so it has to work on Windows too."""
     if not sys.stdin.isatty():
         return
     try:
-        import select as _sel
-        import termios
-        import tty
-
-        fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setcbreak(fd)
-            while not stop_event.is_set():
-                if _sel.select([sys.stdin], [], [], 0.1)[0]:
-                    if sys.stdin.read(1).lower() == "q":
-                        quit_event.set()
-                        return
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if sys.platform == "win32":
+            _listen_windows(quit_event, stop_event)
+        else:
+            _listen_posix(quit_event, stop_event)
     except Exception:
+        # Never let a terminal quirk take the download down; the user still has Ctrl+C.
         pass
+
+
+def _listen_posix(quit_event: threading.Event, stop_event: threading.Event) -> None:
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while not stop_event.is_set():
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                if sys.stdin.read(1).lower() == "q":
+                    quit_event.set()
+                    return
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _listen_windows(quit_event: threading.Event, stop_event: threading.Event) -> None:
+    # termios and select-on-stdin do not exist on Windows; msvcrt polls the console instead.
+    import msvcrt
+
+    while not stop_event.is_set():
+        if msvcrt.kbhit():
+            key = msvcrt.getwch()
+            if key.lower() == "q":
+                quit_event.set()
+                return
+        time.sleep(0.1)
 
 
 @dataclass

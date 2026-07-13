@@ -126,8 +126,14 @@ os-download
 # Three simultaneous downloads
 os-download --parallel 3
 
-# Skip checksum verification (it is on by default)
+# Skip verification (it is on by default)
 os-download --no-verify
+
+# Refuse anything not signed by a pinned distribution key
+os-download --require-signature
+
+# Faster: split each file across 16 connections (needs aria2c)
+os-download --connections 16
 
 # Download to a specific directory
 os-download --dir /mnt/nas/isos
@@ -173,6 +179,34 @@ At startup, if partial files are detected you are prompted to resume or start fr
 
 ---
 
+## Verification
+
+Every download is verified by default. Two things are checked, in this order:
+
+1. **The signature on the checksum file.** A hash fetched from the same mirror as the ISO
+   only proves the download was not truncated — whoever can serve a bad ISO can serve a
+   matching hash. Ubuntu, Debian, Linux Mint and Fedora sign their checksum files, and their
+   signing keys are pinned in `downloader/signatures.py`. Keys are only ever imported *by
+   pinned fingerprint*, or from a keyring published over HTTPS by the distribution itself
+   (Fedora rotates its key every release), so a mirror can never introduce a key of its own.
+2. **The SHA256 hash** of the file, once the document it came from is known to be authentic.
+
+| Outcome | What it means | Result |
+|---|---|---|
+| Signed by a pinned key, hash matches | Authentic | Download succeeds |
+| Hash matches, but nothing signed it | Intact, unproven | Succeeds with a warning (fails under `--require-signature`) |
+| Bad signature | The signing key was substituted | **Fails**, file moved to `.corrupt` |
+| Hash mismatch | Corrupt or tampered | **Fails**, file moved to `.corrupt` |
+| No checksum published | Nothing to check against | Succeeds with a warning (fails under `--require-signature`) |
+
+A file that fails verification is renamed to `<name>.corrupt` rather than left in place, so a
+later resume cannot append to bad bytes. Verified files record a `.verified` marker, so a
+multi-gigabyte ISO is not re-hashed on every run.
+
+Signature verification needs `gpg` on `PATH`; without it, verification falls back to
+hash-only and says so.
+
+---
 ## All flags
 
 **`os-finder`**
@@ -184,6 +218,7 @@ At startup, if partial files are detected you are prompted to resume or start fr
 | `--timeout` | `15` | HTTP timeout in seconds |
 | `--no-interactive` | off | Skip manual override prompt when a URL cannot be found |
 | `--json` | off | Print JSON to stdout, suppress progress display |
+| `--check` | off | Report which OSes still resolve to an ISO; exits non-zero if any do not |
 | `--log` | `./logs/os-finder.log` | Log file path |
 
 **`os-download`**
@@ -194,11 +229,15 @@ At startup, if partial files are detected you are prompted to resume or start fr
 | `--url` / `-u` | | Download a single URL |
 | `--dir` / `-d` | `~/Downloads/os-isos` | Output directory |
 | `--parallel` | `1` | Simultaneous downloads |
-| `--no-verify` | off | Skip SHA256 checksum verification (verification is on by default) |
+| `--backend` | `auto` | `auto` / `aria2` / `python`. `auto` uses aria2c for multi-connection downloads when installed |
+| `--connections` | `8` | Connections per file when using aria2c |
+| `--retries` | `3` | Attempts per file before giving up; a retry resumes |
+| `--no-verify` | off | Skip checksum + signature verification (verification is on by default) |
+| `--require-signature` | off | Fail unless the checksum file is signed by a pinned distribution key |
 | `--no-decompress` | off | Keep `.bz2` / `.gz` files compressed |
 | `--no-resume` | off | Start downloads from the beginning even if partial file exists |
 | `--no-interactive` | off | Fail fast on error without prompting to continue |
-| `--chunk-size` | `8192` | Download chunk size in bytes |
+| `--chunk-size` | `8192` | Download chunk size in bytes (built-in backend) |
 | `--log` | `./logs/os-download.log` | Log file path |
 
 ---

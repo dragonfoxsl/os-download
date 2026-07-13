@@ -9,6 +9,18 @@ from rich.progress import Progress
 
 from os_download.downloader.manager import MIN_COMPLETE_BYTES, DownloadManager
 from os_download.downloader.ui import SessionDashboard, SessionState
+from os_download.downloader.verification import VerifyReport, VerifyStatus
+
+
+def stub_verifier(monkeypatch, status: VerifyStatus, calls: list | None = None) -> None:
+    """Replace the real verifier, which would otherwise fetch checksums over the network."""
+
+    def fake_verify_download(session, filepath, url, use_cache=True):
+        if calls is not None:
+            calls.append((filepath.name, filepath.exists()))
+        return VerifyReport(status, "stubbed")
+
+    monkeypatch.setattr("os_download.downloader.manager.verify_download", fake_verify_download)
 
 
 def make_dashboard(
@@ -35,13 +47,9 @@ def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, mon
     manager = DownloadManager(download_dir=str(tmp_path))
     archive = tmp_path / "image.iso.gz"
     archive.write_bytes(gzip.compress(b"iso"))
-    calls = []
+    calls: list = []
 
-    def fake_verify(filepath: Path, url: str):
-        calls.append(("verify", filepath.name, archive.exists()))
-        return True
-
-    monkeypatch.setattr(manager, "verify_checksum", fake_verify)
+    stub_verifier(monkeypatch, VerifyStatus.VERIFIED, calls)
 
     assert manager._post_download(
         archive,
@@ -51,7 +59,9 @@ def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, mon
         own_progress=False,
     )
 
-    assert calls == [("verify", "image.iso.gz", True)]
+    # The published hash covers the archive as downloaded, so it must be checked before
+    # decompression replaces it.
+    assert calls == [("image.iso.gz", True)]
     assert (tmp_path / "image.iso").exists()
 
 
@@ -60,7 +70,7 @@ def test_post_download_quarantines_a_file_that_fails_verification(tmp_path: Path
     iso = tmp_path / "image.iso"
     iso.write_bytes(b"corrupt payload")
 
-    monkeypatch.setattr(manager, "verify_checksum", lambda filepath, url: False)
+    stub_verifier(monkeypatch, VerifyStatus.HASH_MISMATCH)
 
     assert not manager._post_download(
         iso,
@@ -73,6 +83,44 @@ def test_post_download_quarantines_a_file_that_fails_verification(tmp_path: Path
     # Left in place, a resume would append to the corrupt bytes and never recover.
     assert not iso.exists()
     assert (tmp_path / "image.iso.corrupt").read_bytes() == b"corrupt payload"
+
+
+def test_post_download_quarantines_a_file_whose_checksum_signature_is_invalid(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path))
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"payload")
+
+    # The bytes may well match the hash: a substituted signing key means the hash itself
+    # cannot be trusted, so a bad signature is fatal regardless.
+    stub_verifier(monkeypatch, VerifyStatus.SIGNATURE_INVALID)
+
+    assert not manager._post_download(
+        iso, "https://example.test/image.iso", verify=True, decompress=True, own_progress=False
+    )
+    assert not iso.exists()
+    assert (tmp_path / "image.iso.corrupt").exists()
+
+
+def test_post_download_accepts_an_unsigned_checksum_by_default_but_not_under_require_signature(
+    tmp_path: Path, monkeypatch
+):
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"payload")
+    stub_verifier(monkeypatch, VerifyStatus.HASH_ONLY)
+
+    lenient = DownloadManager(download_dir=str(tmp_path))
+    assert lenient._post_download(
+        iso, "https://example.test/image.iso", verify=True, decompress=False, own_progress=False
+    )
+
+    strict = DownloadManager(download_dir=str(tmp_path), require_signature=True)
+    assert not strict._post_download(
+        iso, "https://example.test/image.iso", verify=True, decompress=False, own_progress=False
+    )
+    # An unsigned file is unproven, not proven bad, so it is kept rather than quarantined.
+    assert iso.exists()
 
 
 def test_download_file_treats_416_resume_as_complete_when_local_size_matches_server(
@@ -111,11 +159,12 @@ def test_download_file_treats_416_resume_as_complete_when_local_size_matches_ser
             return HeadResponse()
 
     monkeypatch.setattr(manager, "session", Session())
-    monkeypatch.setattr(
-        manager,
-        "verify_checksum",
-        lambda path, url: calls.append(("verify", path.name, path.exists(), url)) or True,
-    )
+
+    def fake_verify_download(session, path, url, use_cache=True):
+        calls.append(("verify", path.name, path.exists(), url))
+        return VerifyReport(VerifyStatus.VERIFIED, "stubbed")
+
+    monkeypatch.setattr("os_download.downloader.manager.verify_download", fake_verify_download)
 
     def fake_decompress(path: Path, verbose: bool = True) -> Path:
         calls.append(("decompress", path.name, path.exists(), verbose))

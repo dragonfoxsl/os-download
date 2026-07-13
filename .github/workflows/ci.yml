@@ -16,6 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The aria2 and gpg paths are skipped when the binaries are absent, so install them
+      # here or they would never actually run.
+      - name: Install aria2 and gnupg
+        run: sudo apt-get update && sudo apt-get install -y aria2 gnupg
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:

@@ -8,7 +8,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from os_download.finders.base import ISO_EXTS, url_kind
+from os_download import __version__
+from os_download.finders.base import ISO_EXTS, has_iso_link, url_kind
 from os_download.finders.registry import OS_CHOICES, MultiOSDownloadFinder
 from os_download.logging import setup_file_logger
 
@@ -52,8 +53,43 @@ def _print_summary(finder: MultiOSDownloadFinder, all_links: dict[str, dict[str,
     )
 
 
+def _run_check(finder: MultiOSDownloadFinder, os_list: list[str]) -> int:
+    """Report which finders still resolve an ISO. Exit code is the number that no longer do.
+
+    A finder that quietly stops resolving is this project's real failure mode: mirrors
+    reorganise, and nothing tells you until you go to download. Run this on a schedule.
+    """
+    all_links = finder.find_all_links(os_list, interactive=False, quiet=True)
+
+    broken = []
+    for name in os_list:
+        links = all_links.get(name, {})
+        display_name = finder.finders[name].name
+        if has_iso_link(links):
+            iso_count = sum(1 for url in links.values() if url.lower().endswith(ISO_EXTS))
+            detail = f"{iso_count} ISO{'s' if iso_count != 1 else ''}" if iso_count else "Mido"
+            console.print(f"  [green]✓[/] {display_name:<20} [dim]{detail}[/]")
+        else:
+            broken.append(display_name)
+            reason = "no ISO link (only a download page)" if links else "nothing resolved"
+            console.print(f"  [red]✗[/] {display_name:<20} [red]{reason}[/]")
+            logger.error("CHECK FAILED  %-14s  %s", name, reason)
+
+    console.print()
+    if broken:
+        console.print(
+            f"[red]✗ {len(broken)} of {len(os_list)} finders no longer resolve an ISO:[/] "
+            f"{', '.join(broken)}"
+        )
+        return 1
+
+    console.print(f"[green]✓ All {len(os_list)} finders resolve an ISO.[/]")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-OS Download Link Finder")
+    parser.add_argument("--version", action="version", version=f"os-finder {__version__}")
     parser.add_argument(
         "--os",
         nargs="+",
@@ -83,6 +119,11 @@ def main() -> None:
         help="Output results as JSON and suppress progress messages",
     )
     parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Report which OSes still resolve to an ISO and exit non-zero if any do not",
+    )
+    parser.add_argument(
         "--log",
         metavar="FILE",
         default="./logs/os-finder.log",
@@ -94,6 +135,9 @@ def main() -> None:
 
     finder = MultiOSDownloadFinder(timeout=args.timeout)
     os_list = list(finder.finders.keys()) if "all" in args.os else args.os
+
+    if args.check:
+        sys.exit(_run_check(finder, os_list))
 
     if args.json:
         all_links = finder.find_all_links(os_list, interactive=False, quiet=True)

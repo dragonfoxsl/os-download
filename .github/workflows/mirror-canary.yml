@@ -1,0 +1,84 @@
+name: Mirror canary
+
+# Finders break silently when a mirror reorganises its directory layout. Catch that on a
+# schedule rather than the next time someone tries to download.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync
+
+      - name: Resolve every OS against its live mirror
+        id: check
+        run: |
+          set -o pipefail
+          uv run os-finder --check --no-interactive --log ./logs/canary.log 2>&1 | tee report.txt
+
+      - name: Open an issue when a finder stops resolving
+        if: failure() && steps.check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.txt', 'utf8');
+            const title = 'Mirror canary: a finder no longer resolves an ISO';
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'mirror-canary',
+            });
+            const body = [
+              'The scheduled mirror check failed. A mirror has most likely changed its',
+              'directory layout, so the affected finder needs its scraping updated.',
+              '',
+              '```',
+              report.trim(),
+              '```',
+              '',
+              `[Workflow run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+            ].join('\n');
+
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['mirror-canary'],
+              });
+            }
+
+      - name: Upload the finder log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-log
+          path: |
+            report.txt
+            logs/canary.log
+          if-no-files-found: ignore

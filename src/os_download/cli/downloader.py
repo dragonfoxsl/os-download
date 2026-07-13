@@ -5,6 +5,8 @@ from pathlib import Path
 
 from rich.console import Console
 
+from os_download import __version__
+from os_download.downloader.aria2 import aria2_available
 from os_download.downloader.manager import DownloadManager
 from os_download.downloader.paths import default_download_dir
 from os_download.logging import setup_file_logger
@@ -15,6 +17,7 @@ console = Console()
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="OS ISO Download Manager")
+    parser.add_argument("--version", action="version", version=f"os-download {__version__}")
     parser.add_argument(
         "--file",
         "-f",
@@ -42,6 +45,14 @@ def main() -> None:
         help="Skip SHA256 checksum verification (verification is on by default)",
     )
     parser.add_argument(
+        "--require-signature",
+        action="store_true",
+        help=(
+            "Fail a download unless its checksum file carries a valid signature from a "
+            "pinned distribution key (by default an unsigned checksum only warns)"
+        ),
+    )
+    parser.add_argument(
         "--no-decompress",
         action="store_true",
         help="Skip automatic decompression of .bz2/.gz files",
@@ -52,6 +63,29 @@ def main() -> None:
         default=1,
         metavar="N",
         help="Number of simultaneous downloads (default: 1)",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=("auto", "aria2", "python"),
+        default="auto",
+        help=(
+            "Download backend. 'auto' uses aria2c for multi-connection downloads when it is "
+            "installed and falls back to the built-in one (default: auto)"
+        ),
+    )
+    parser.add_argument(
+        "--connections",
+        type=int,
+        default=8,
+        metavar="N",
+        help="Connections per file when using aria2c (default: 8)",
+    )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Attempts per file before giving up; a retry resumes (default: 3)",
     )
     parser.add_argument(
         "--chunk-size",
@@ -69,7 +103,17 @@ def main() -> None:
 
     setup_file_logger(logger, args.log)
 
-    manager = DownloadManager(download_dir=args.dir, chunk_size=args.chunk_size)
+    manager = DownloadManager(
+        download_dir=args.dir,
+        chunk_size=args.chunk_size,
+        require_signature=args.require_signature,
+        backend=args.backend,
+        connections=args.connections,
+        max_retries=args.retries,
+    )
+    if args.backend == "aria2" and not aria2_available():
+        console.print("[red]✗ --backend aria2 was requested but aria2c is not installed[/]")
+        sys.exit(1)
     resume = not args.no_resume
     decompress = not args.no_decompress
     verify = not args.no_verify

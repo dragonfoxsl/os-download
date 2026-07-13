@@ -4,10 +4,32 @@ version = "0.1.0"
 description = "Find and download OS ISO images for Ubuntu, Fedora, openSUSE, Arch, Linux Mint, Rocky Linux, Windows 11, and more"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Bisina Wickremasinghe" }]
+keywords = ["iso", "download", "linux", "distro", "mirror", "checksum"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Archiving :: Mirroring",
+    "Topic :: Utilities",
+]
 dependencies = [
     "requests>=2.25.0",
     "rich>=13.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/dragonfoxsl/os-download"
+Repository = "https://github.com/dragonfoxsl/os-download"
+Issues = "https://github.com/dragonfoxsl/os-download/issues"
 
 [dependency-groups]
 dev = [

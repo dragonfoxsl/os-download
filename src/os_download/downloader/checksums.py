@@ -1,11 +1,25 @@
 import hashlib
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
 
 logger = logging.getLogger("os_download")
+
+
+@dataclass(frozen=True)
+class ChecksumSource:
+    """The published hash for a file, and the exact document it was read from.
+
+    The document and its URL are kept so the signature over it can be verified; a hash on
+    its own says nothing about who published it.
+    """
+
+    expected: str
+    url: str
+    text: str
 
 # Sidecar files sit next to the ISO and hold the hash for that one file.
 SIDECAR_SUFFIXES = (".sha256", ".sha256sum", ".SHA256")
@@ -67,50 +81,76 @@ def _fetch(session: requests.Session, url: str) -> str | None:
     return response.text
 
 
-def _expected_hash(session: requests.Session, filepath: Path, url: str) -> str | None:
+def _effective_url(session: requests.Session, url: str) -> str:
+    """Follow redirects once, so sibling files are looked for next to the real ISO.
+
+    Redirectors like download.fedoraproject.org hand out a different mirror per request, so
+    resolving siblings against the redirector can search a mirror that never held the ISO.
+    """
+    try:
+        response = session.head(url, timeout=15, allow_redirects=True)
+    except Exception as exc:
+        logger.debug("EFFECTIVE_URL_FAILED  %s  -  %s", url, exc)
+        return url
+    resolved = getattr(response, "url", None)
+    if not resolved or not isinstance(resolved, str):
+        return url
+    if resolved != url:
+        logger.debug("EFFECTIVE_URL  %s  ->  %s", url, resolved)
+    return resolved
+
+
+def resolve_checksum(
+    session: requests.Session, filepath: Path, url: str
+) -> ChecksumSource | None:
+    """Find the published hash for a download, and the document it came from."""
     filename = filepath.name
+    url = _effective_url(session, url)
 
     for suffix in SIDECAR_SUFFIXES:
-        text = _fetch(session, url + suffix)
+        sidecar_url = url + suffix
+        text = _fetch(session, sidecar_url)
         if text is None:
             continue
         bare = _bare_hash(text)
         if bare:
-            return bare
+            return ChecksumSource(bare, sidecar_url, text)
         checksums = parse_checksums(text)
         if filename in checksums:
-            return checksums[filename]
+            return ChecksumSource(checksums[filename], sidecar_url, text)
         if len(checksums) == 1:
-            return next(iter(checksums.values()))
+            return ChecksumSource(next(iter(checksums.values())), sidecar_url, text)
 
     directory_url = url.rsplit("/", 1)[0] + "/"
     for name in DIRECTORY_FILENAMES:
-        text = _fetch(session, directory_url + name)
+        checksum_url = directory_url + name
+        text = _fetch(session, checksum_url)
         if text is None:
             continue
         checksums = parse_checksums(text)
         if filename in checksums:
-            return checksums[filename]
+            return ChecksumSource(checksums[filename], checksum_url, text)
 
     index = _fetch(session, directory_url)
     if index:
         for name in dict.fromkeys(_INDEX_LINK_RE.findall(index)):
             if name in DIRECTORY_FILENAMES:
                 continue
-            text = _fetch(session, directory_url + name)
+            checksum_url = directory_url + name
+            text = _fetch(session, checksum_url)
             if text is None:
                 continue
             checksums = parse_checksums(text)
             if filename in checksums:
-                return checksums[filename]
+                return ChecksumSource(checksums[filename], checksum_url, text)
 
+    logger.debug("CHECKSUM_NOT_PUBLISHED  %s", url)
     return None
 
 
 def verify_checksum(session: requests.Session, filepath: Path, url: str) -> bool | None:
     """True if the file matches its published hash, False on mismatch, None if no hash was found."""
-    expected = _expected_hash(session, filepath, url)
-    if expected is None:
-        logger.debug("CHECKSUM_NOT_PUBLISHED  %s", url)
+    source = resolve_checksum(session, filepath, url)
+    if source is None:
         return None
-    return hash_file(filepath) == expected
+    return hash_file(filepath) == source.expected
