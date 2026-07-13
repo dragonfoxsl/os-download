@@ -18,3 +18,7 @@ logs/
 # Exclude the contents of the downloads folder
 downloads/*
 !downloads/Usage.md
+
+# Agent working notes: plans, specs and task reports. Local scratch, not project docs.
+.superpowers/
+docs/superpowers/
