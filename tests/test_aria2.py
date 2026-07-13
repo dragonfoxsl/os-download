@@ -34,6 +34,63 @@ def test_python_backend_still_finishes_a_partial_aria2_download_with_aria2(
     assert manager._use_aria2(partial)
 
 
+def test_a_url_aria2_cannot_fetch_falls_back_to_the_built_in_backend(tmp_path: Path, monkeypatch):
+    # Some mirrors reject aria2 outright. Retrying it three times and giving up would fail a
+    # file the plain client (and its curl-on-403 fallback) can fetch perfectly well.
+    manager = DownloadManager(download_dir=str(tmp_path), backend="aria2")
+    monkeypatch.setattr(manager_module, "aria2_available", lambda: True)
+    monkeypatch.setattr(
+        manager_module,
+        "download_with_aria2",
+        lambda url, filepath, connections, progress, task_id, stop_event: False,
+    )
+
+    class Response:
+        status_code = 200
+        headers = {"content-length": "4"}
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            yield b"good"
+
+    class Session:
+        def get(self, url, headers=None, stream=True, timeout=30):
+            return Response()
+
+    manager.session = Session()
+
+    assert manager.download_file("https://example.test/image.iso", verify=False, decompress=False)
+    assert (tmp_path / "image.iso").read_bytes() == b"good"
+
+
+def test_aria2_keeps_its_own_partial_rather_than_falling_back(tmp_path: Path, monkeypatch):
+    # With a control file present the partial is segmented and may have holes, so the
+    # built-in backend must not touch it: only aria2 can finish it.
+    manager = DownloadManager(download_dir=str(tmp_path), backend="aria2")
+    partial = tmp_path / "image.iso"
+    partial.write_bytes(b"segmented")
+    (tmp_path / ("image.iso" + CONTROL_SUFFIX)).write_bytes(b"control")
+
+    monkeypatch.setattr(manager_module, "aria2_available", lambda: True)
+    monkeypatch.setattr(
+        manager_module,
+        "download_with_aria2",
+        lambda url, filepath, connections, progress, task_id, stop_event: False,
+    )
+
+    class Session:
+        def get(self, *args, **kwargs):
+            raise AssertionError("the built-in backend must not touch a segmented partial")
+
+    manager.session = Session()
+    monkeypatch.setattr(manager_module.time, "sleep", lambda seconds: None)
+
+    assert not manager.download_file("https://example.test/image.iso", verify=False)
+    assert partial.read_bytes() == b"segmented"
+
+
 def test_a_segmented_partial_is_discarded_rather_than_resumed_when_aria2_is_gone(
     tmp_path: Path, monkeypatch
 ):

@@ -301,11 +301,17 @@ class DownloadManager:
             )
             if own_progress and progress is not None:
                 progress.stop()
-            if not ok:
-                if stop_event is not None and stop_event.is_set():
-                    return Outcome.STOPPED
+            if ok:
+                return self._finish(filepath, url, verify, decompress, own_progress)
+            if stop_event is not None and stop_event.is_set():
+                return Outcome.STOPPED
+            if has_control_file(filepath):
+                # aria2 got partway. Its partial is segmented, so only aria2 can finish it.
                 return Outcome.RETRYABLE
-            return self._finish(filepath, url, verify, decompress, own_progress)
+            # aria2 got nowhere at all - a mirror that rejects it outright, say. Fall through
+            # to the built-in path, which knows how to fall back to curl on a 403. Retrying
+            # aria2 three times and giving up would fail a file the plain client can fetch.
+            logger.warning("ARIA2 FALLBACK  %s  (retrying with the built-in backend)", filename)
 
         if has_control_file(filepath):
             # aria2 left a segmented partial and cannot finish it here. Its holes make the

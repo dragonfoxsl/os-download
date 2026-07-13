@@ -110,14 +110,14 @@ def server():
 
 
 def test_download_file_fetches_a_whole_file(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
 
     assert manager.download_file(f"{server}/file.iso", decompress=False)
     assert (tmp_path / "file.iso").read_bytes() == PAYLOAD
 
 
 def test_download_file_resumes_a_partial_file_without_refetching_it(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     partial = tmp_path / "file.iso"
     partial.write_bytes(PAYLOAD[:4096])
 
@@ -131,13 +131,13 @@ def test_download_file_resumes_a_partial_file_without_refetching_it(tmp_path: Pa
 
 
 def test_the_session_does_not_negotiate_a_content_coding(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
 
     assert manager.session.headers["Accept-Encoding"] == "identity"
 
 
 def test_download_file_restarts_from_scratch_when_resume_is_disabled(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     stale = tmp_path / "file.iso"
     stale.write_bytes(b"stale bytes that must not survive")
 
@@ -146,7 +146,7 @@ def test_download_file_restarts_from_scratch_when_resume_is_disabled(tmp_path: P
 
 
 def test_download_file_treats_a_416_on_a_complete_file_as_success(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     complete = tmp_path / "file.iso"
     complete.write_bytes(PAYLOAD)
 
@@ -157,7 +157,7 @@ def test_download_file_treats_a_416_on_a_complete_file_as_success(tmp_path: Path
 def test_download_file_quarantines_a_file_that_fails_verification(
     tmp_path: Path, server: str, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     monkeypatch.setattr(
         "os_download.downloader.manager.verify_download",
         lambda session, filepath, url, use_cache=True: VerifyReport(
@@ -173,7 +173,7 @@ def test_download_file_quarantines_a_file_that_fails_verification(
 def test_download_file_verifies_against_a_checksum_the_server_publishes(
     tmp_path: Path, server: str
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
 
     # The server publishes SHA256SUMS covering file.iso, so this exercises the real
     # resolve-then-hash path end to end; nothing signs it, so it lands as hash-only.
@@ -184,14 +184,14 @@ def test_download_file_verifies_against_a_checksum_the_server_publishes(
 def test_download_file_rejects_an_unsigned_checksum_under_require_signature(
     tmp_path: Path, server: str
 ):
-    manager = DownloadManager(download_dir=str(tmp_path), require_signature=True)
+    manager = DownloadManager(download_dir=str(tmp_path), require_signature=True, backend="python")
 
     assert not manager.download_file(f"{server}/file.iso", verify=True, decompress=False)
 
 
 @pytest.mark.skipif(shutil.which("curl") is None, reason="curl is not installed")
 def test_download_file_falls_back_to_curl_on_403(tmp_path: Path, server: str):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
 
     assert manager.download_file(f"{server}/forbidden.iso", decompress=False)
     assert (tmp_path / "forbidden.iso").read_bytes() == PAYLOAD

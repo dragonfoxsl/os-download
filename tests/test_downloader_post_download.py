@@ -44,7 +44,7 @@ def make_dashboard(
 
 
 def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     archive = tmp_path / "image.iso.gz"
     archive.write_bytes(gzip.compress(b"iso"))
     calls: list = []
@@ -66,7 +66,7 @@ def test_post_download_verifies_archive_before_decompressing(tmp_path: Path, mon
 
 
 def test_post_download_quarantines_a_file_that_fails_verification(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     iso = tmp_path / "image.iso"
     iso.write_bytes(b"corrupt payload")
 
@@ -88,7 +88,7 @@ def test_post_download_quarantines_a_file_that_fails_verification(tmp_path: Path
 def test_post_download_quarantines_a_file_whose_checksum_signature_is_invalid(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     iso = tmp_path / "image.iso"
     iso.write_bytes(b"payload")
 
@@ -110,12 +110,12 @@ def test_post_download_accepts_an_unsigned_checksum_by_default_but_not_under_req
     iso.write_bytes(b"payload")
     stub_verifier(monkeypatch, VerifyStatus.HASH_ONLY)
 
-    lenient = DownloadManager(download_dir=str(tmp_path))
+    lenient = DownloadManager(download_dir=str(tmp_path), backend="python")
     assert lenient._post_download(
         iso, "https://example.test/image.iso", verify=True, decompress=False, own_progress=False
     )
 
-    strict = DownloadManager(download_dir=str(tmp_path), require_signature=True)
+    strict = DownloadManager(download_dir=str(tmp_path), require_signature=True, backend="python")
     assert not strict._post_download(
         iso, "https://example.test/image.iso", verify=True, decompress=False, own_progress=False
     )
@@ -126,7 +126,7 @@ def test_post_download_accepts_an_unsigned_checksum_by_default_but_not_under_req
 def test_download_file_treats_416_resume_as_complete_when_local_size_matches_server(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     filepath = tmp_path / "image.iso.gz"
     filepath.write_bytes(gzip.compress(b"iso"))
     archive_size = filepath.stat().st_size
@@ -205,7 +205,7 @@ def test_download_file_treats_416_resume_as_complete_when_local_size_matches_ser
 def test_download_file_restarts_from_scratch_after_416_when_local_size_is_short(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     filepath = tmp_path / "image.iso"
     filepath.write_bytes(b"123")
 
@@ -274,7 +274,7 @@ def test_download_file_restarts_from_scratch_after_416_when_local_size_is_short(
 def test_download_file_restarts_from_scratch_after_416_when_local_size_is_oversized(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     filepath = tmp_path / "image.iso"
     filepath.write_bytes(b"1234567")
 
@@ -341,7 +341,7 @@ def test_download_file_restarts_from_scratch_after_416_when_local_size_is_oversi
 
 
 def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [f"https://example.test/file-{index}.iso" for index in range(3)]
     lock = threading.Lock()
     inflight = 0
@@ -381,7 +381,7 @@ def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monke
 
 
 def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/recent.iso"
     filepath = tmp_path / "recent.iso"
     filepath.write_bytes(b"x" * MIN_COMPLETE_BYTES)
@@ -400,7 +400,7 @@ def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Pa
 def test_download_from_file_does_not_treat_tiny_file_as_a_completed_download(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/recent.iso"
     # What a mirror's HTML error page looks like on disk: recent, non-empty, far too small.
     (tmp_path / "recent.iso").write_bytes(b"<html>404 Not Found</html>")
@@ -421,7 +421,7 @@ def test_download_from_file_does_not_treat_tiny_file_as_a_completed_download(
 def test_download_from_file_can_restart_older_partial_files_from_scratch(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/partial.iso"
     filepath = tmp_path / "partial.iso"
     filepath.write_bytes(b"partial")
@@ -462,7 +462,7 @@ def test_download_from_file_can_restart_older_partial_files_from_scratch(
 
 
 def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [
         "https://example.test/fail-once.iso",
         "https://example.test/ok.iso",
@@ -495,7 +495,7 @@ def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Pat
 def test_download_from_file_skips_failed_file_and_continues_by_default(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [
         "https://example.test/fail.iso",
         "https://example.test/next.iso",
@@ -533,7 +533,7 @@ def test_download_from_file_skips_failed_file_and_continues_by_default(
 def test_download_from_file_returns_false_on_partial_failure_without_retry(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [
         "https://example.test/ok.iso",
         "https://example.test/fail.iso",
@@ -563,7 +563,7 @@ def test_download_from_file_returns_false_on_partial_failure_without_retry(
 def test_download_from_file_returns_false_when_mido_batch_has_partial_failure(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [
         "mido://success-variant",
         "mido://fail-variant",
@@ -588,7 +588,7 @@ def test_download_from_file_returns_false_when_mido_batch_has_partial_failure(
 def test_download_from_file_returns_false_when_mido_fails_and_regular_downloads_succeed(
     tmp_path: Path, monkeypatch
 ):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     urls = [
         "mido://fail-variant",
         "https://example.test/ok.iso",
@@ -667,7 +667,7 @@ def test_completion_summary_does_not_count_unstarted_files_as_downloaded():
 
 
 def test_download_from_file_uses_shared_stop_event_for_keyboard_quit(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path))
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/quit.iso"
     saw_stop_event = []
 
