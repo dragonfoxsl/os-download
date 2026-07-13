@@ -39,7 +39,9 @@ node scripts/svg2png.mjs                        # then rasterise every SVG to PN
 
 The README screenshots are generated from the real CLIs and the real `SessionDashboard`, never hand-edited — a hand-edited one silently advertised a `--verify` flag that had been removed.
 
-**The README must reference images as PNGs at absolute `raw.githubusercontent.com` URLs.** The same README is rendered on PyPI, which has no repo context (so relative paths 404) and where `raw.githubusercontent.com` serves `.svg` as `text/plain` (so SVGs do not draw). The SVGs remain the source of truth; `svg2png.mjs` rasterises them. Note that `rsvg-convert` renders Rich's SVG export badly — it collapses the spacing — so rasterise and check in a browser, which is what GitHub and PyPI use.
+**The README must reference images by absolute URL, because the same README is rendered on PyPI.** PyPI has no repo context, so a relative path like `assets/logo.svg` 404s there — that is what broke the logo on the 0.1.0 project page. Use `https://raw.githubusercontent.com/dragonfoxsl/os-download/main/...`.
+
+We also rasterise to PNG (`svg2png.mjs`) and reference the PNGs rather than the SVGs. Raw GitHub does currently serve `.svg` as `image/svg+xml`, so an absolute SVG URL would probably work, but PNG renders everywhere without depending on a third party's content-type or a renderer's SVG policy. The SVGs remain the source of truth. Note that `rsvg-convert` renders Rich's SVG export badly — it collapses the spacing — so rasterise and check in a browser, which is what GitHub and PyPI use.
 
 The PyPI project page only updates when a new version is uploaded; a README fix on `main` will not appear there until the next release.
 

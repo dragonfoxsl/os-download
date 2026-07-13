@@ -1,14 +1,12 @@
 // Rasterise the README's SVGs to PNG.
 //
-// The README is rendered by both GitHub and PyPI, and PyPI is the fussy one:
+// The same README is rendered on PyPI, which has no repo context: a relative image path
+// 404s there, which is what broke the logo on the 0.1.0 project page. Image URLs must be
+// absolute. PNG is used rather than SVG because it renders everywhere without depending on
+// a third party's content-type or a renderer's SVG policy.
 //
-//   * relative paths do not resolve there (it has no repo context), so image URLs must be
-//     absolute, and
-//   * raw.githubusercontent.com serves .svg as text/plain, so a browser will not draw it.
-//
-// Between them, the README can only use PNGs at absolute raw URLs. Rich's SVG export also
-// relies on textLength and per-span positioning, which rsvg-convert renders badly (it
-// collapses the spacing), so rasterise in a real browser engine instead.
+// Rich's SVG export relies on textLength and per-span positioning, which rsvg-convert
+// renders badly (it collapses the spacing), so rasterise in a real browser engine instead.
 //
 //   node scripts/svg2png.mjs
 //
