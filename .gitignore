@@ -26,3 +26,6 @@ docs/superpowers/
 # Per-machine agent settings, and the temp files they write while saving
 .claude/settings.local.json
 .claude/*.tmp.*
+
+# Personal drafts, not project docs
+social-posts.md
