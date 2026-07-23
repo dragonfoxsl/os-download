@@ -390,6 +390,8 @@ Commits must not include AI co-author trailers.
 Future README rewrites should preserve this structure and only add new
 Ko-fi/support content when explicitly requested.
 Before pushing, check configured GitHub Actions and Dependabot status for failures or open alerts.
+The dependency lockfile was refreshed on 2026-07-23 for patched `idna`,
+`requests`, and `urllib3` releases after Dependabot security alerts.
 
 ---
 

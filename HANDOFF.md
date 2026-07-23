@@ -27,5 +27,6 @@
 
 ## Open Items
 
+- `uv.lock` was refreshed on 2026-07-23 for patched `idna`, `requests`, and `urllib3` releases after Dependabot security alerts.
 - Keep README screenshots/help output aligned before release tags.
 - Recheck finder modules when upstream distro download pages change.
