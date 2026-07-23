@@ -4,6 +4,7 @@
 
 - Branch: `main`
 - Remote: `git@github.com:dragonfoxsl/os-download.git`
+- Current package version: `0.1.3`
 - CI runs on push, pull request, manual dispatch, and Fridays at `03:00 UTC`.
 - Dependabot checks `uv` and GitHub Actions weekly on Friday.
 
@@ -28,5 +29,6 @@
 ## Open Items
 
 - `uv.lock` was refreshed on 2026-07-23 for patched `idna`, `requests`, and `urllib3` releases after Dependabot security alerts.
+- Release `v0.1.3` packages the patched dependency lock update.
 - Keep README screenshots/help output aligned before release tags.
 - Recheck finder modules when upstream distro download pages change.

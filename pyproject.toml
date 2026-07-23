@@ -1,6 +1,6 @@
 [project]
 name = "os-download"
-version = "0.1.2"
+version = "0.1.3"
 description = "Find and download OS ISO images for Ubuntu, Fedora, openSUSE, Arch, Linux Mint, Rocky Linux, Windows 11, and more"
 readme = "README.md"
 requires-python = ">=3.10"

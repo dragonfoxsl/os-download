@@ -351,8 +351,8 @@ Pushing a `vX.Y.Z` tag publishes to PyPI. The workflow authenticates with a [Tru
 
 ```bash
 # 1. Bump the version in BOTH places — the workflow aborts if the tag does not match
-#    pyproject.toml            version = "0.1.2"
-#    src/os_download/__init__.py   __version__ = "0.1.2"
+#    pyproject.toml            version = "0.1.3"
+#    src/os_download/__init__.py   __version__ = "0.1.3"
 
 # 2. Update the README for anything user-facing (flags, defaults, behaviour), and
 #    regenerate the screenshots if the CLI or dashboard changed
@@ -364,7 +364,7 @@ node scripts/svg2png.mjs
 uv run ruff check && uv run pytest -q && uv build
 
 # 4. Tag and push
-git tag -a v0.1.2 -m "os-download 0.1.2" && git push origin v0.1.2
+git tag -a v0.1.3 -m "os-download 0.1.3" && git push origin v0.1.3
 ```
 
 Get the README right *before* tagging: the PyPI project page is baked in at upload time, so a later README fix will not appear there without a new release. A published version can be yanked but never re-uploaded.
@@ -392,6 +392,7 @@ Ko-fi/support content when explicitly requested.
 Before pushing, check configured GitHub Actions and Dependabot status for failures or open alerts.
 The dependency lockfile was refreshed on 2026-07-23 for patched `idna`,
 `requests`, and `urllib3` releases after Dependabot security alerts.
+Version `0.1.3` packages those patched dependency locks.
 
 ---
 
