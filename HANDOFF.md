@@ -11,9 +11,12 @@
 
 - Never add AI co-author trailers to commits.
 - Keep `README.md` and this `HANDOFF.md` updated with each change.
+- Preserve this repository's README style for future README creation or major rewrites.
+- Preserve existing support links, but do not add new Ko-fi/donation content unless explicitly requested.
 - Follow secure development practices for download URLs, checksum verification, subprocess use, and GitHub Actions.
-- Keep every file under 1000 lines; split files before they exceed that limit.
+- Keep code and configuration files under 1000 lines, and normal documentation under 2000 lines.
 - Add concise comments only for non-obvious network, checksum, retry, or platform-specific behavior.
+- Before pushing, check configured GitHub Actions and Dependabot status for failures or open alerts.
 
 ## Verification Baseline
 
