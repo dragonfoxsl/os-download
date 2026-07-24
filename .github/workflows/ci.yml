@@ -37,3 +37,7 @@ jobs:
 
       - name: Test
         run: uv run pytest -q
+
+      # A green test suite does not prove the wheel and source archive can be produced.
+      - name: Build package
+        run: uv build

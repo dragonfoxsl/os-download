@@ -381,8 +381,8 @@ Get the README right *before* tagging: the PyPI project page is baked in at uplo
 
 ## Maintenance Expectations
 
-Repository automation runs CI and Dependabot checks every Friday, with manual
-workflow runs available in GitHub Actions. For every change, keep `README.md`
+Repository automation runs lint, tests, a package build, and Dependabot checks
+every Friday, with manual workflow runs available in GitHub Actions. For every change, keep `README.md`
 and `HANDOFF.md` current, follow secure development practices, add concise
 comments where logic is not obvious, and keep code and configuration files
 under 1000 lines and normal documentation under 2000 lines.

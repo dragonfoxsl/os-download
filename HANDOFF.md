@@ -2,10 +2,11 @@
 
 ## Current State
 
-- Working branch: `docs/maintenance-cleanup` (the repository default is `main`)
+- Working branch: `ci/weekly-build` (the repository default is `main`)
 - Remote: `git@github.com:dragonfoxsl/os-download.git`
 - Current package version: `0.1.3`
-- CI runs on push, pull request, manual dispatch, and Fridays at `03:00 UTC`.
+- CI runs lint, tests, and a package build on push, pull request, manual dispatch,
+  and Fridays at `03:00 UTC`.
 - Dependabot checks `uv` and GitHub Actions weekly on Friday.
 
 ## Maintainer Rules
