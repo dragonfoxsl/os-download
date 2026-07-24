@@ -2,7 +2,7 @@
 
 ## Current State
 
-- Branch: `main`
+- Working branch: `docs/maintenance-cleanup` (the repository default is `main`)
 - Remote: `git@github.com:dragonfoxsl/os-download.git`
 - Current package version: `0.1.3`
 - CI runs on push, pull request, manual dispatch, and Fridays at `03:00 UTC`.
@@ -28,7 +28,10 @@
 
 ## Open Items
 
-- `uv.lock` was refreshed on 2026-07-23 for patched `idna`, `requests`, and `urllib3` releases after Dependabot security alerts.
-- Release `v0.1.3` packages the patched dependency lock update.
+- Dependabot audit (2026-07-24): no open security alerts. Two update PRs
+  remain open: #3 (five grouped GitHub Actions updates) and #8 (`ruff`
+  0.15.18 → 0.16.0). Both PRs currently have green Python 3.10 and 3.13 CI.
+- `uv.lock` was refreshed on 2026-07-23 for patched `idna`, `requests`, and
+  `urllib3`; release `v0.1.3` includes that lock update.
 - Keep README screenshots/help output aligned before release tags.
 - Recheck finder modules when upstream distro download pages change.

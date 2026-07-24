@@ -389,10 +389,11 @@ under 1000 lines and normal documentation under 2000 lines.
 Commits must not include AI co-author trailers.
 Future README rewrites should preserve this structure and only add new
 Ko-fi/support content when explicitly requested.
-Before pushing, check configured GitHub Actions and Dependabot status for failures or open alerts.
-The dependency lockfile was refreshed on 2026-07-23 for patched `idna`,
-`requests`, and `urllib3` releases after Dependabot security alerts.
-Version `0.1.3` packages those patched dependency locks.
+Before pushing, check configured GitHub Actions and Dependabot status for
+failures, open update PRs, or open security alerts. As of 2026-07-24 there are
+no open security alerts; update PRs #3 (GitHub Actions) and #8 (`ruff`) remain
+open with green CI. Version `0.1.3` includes the dependency lock refresh made
+for patched `idna`, `requests`, and `urllib3` releases.
 
 ---
 
