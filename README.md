@@ -351,8 +351,8 @@ Pushing a `vX.Y.Z` tag publishes to PyPI. The workflow authenticates with a [Tru
 
 ```bash
 # 1. Bump the version in BOTH places — the workflow aborts if the tag does not match
-#    pyproject.toml            version = "0.1.3"
-#    src/os_download/__init__.py   __version__ = "0.1.3"
+#    pyproject.toml            version = "0.1.4"
+#    src/os_download/__init__.py   __version__ = "0.1.4"
 
 # 2. Update the README for anything user-facing (flags, defaults, behaviour), and
 #    regenerate the screenshots if the CLI or dashboard changed
@@ -364,7 +364,7 @@ node scripts/svg2png.mjs
 uv run ruff check && uv run pytest -q && uv build
 
 # 4. Tag and push
-git tag -a v0.1.3 -m "os-download 0.1.3" && git push origin v0.1.3
+git tag -a v0.1.4 -m "os-download 0.1.4" && git push origin v0.1.4
 ```
 
 Get the README right *before* tagging: the PyPI project page is baked in at upload time, so a later README fix will not appear there without a new release. A published version can be yanked but never re-uploaded.
@@ -376,24 +376,6 @@ Get the README right *before* tagging: the PyPI project page is baked in at uplo
 | Project | Role |
 |---|---|
 | [Mido](https://github.com/ElliotKillick/Mido) by [@ElliotKillick](https://github.com/ElliotKillick) | Windows 11 ISO download — Mido replicates Microsoft's JavaScript session-token flow to deliver a direct ISO. os-download clones and invokes it automatically. |
-
----
-
-## Maintenance Expectations
-
-Repository automation runs lint, tests, a package build, and Dependabot checks
-every Friday, with manual workflow runs available in GitHub Actions. For every change, keep `README.md`
-and `HANDOFF.md` current, follow secure development practices, add concise
-comments where logic is not obvious, and keep code and configuration files
-under 1000 lines and normal documentation under 2000 lines.
-Commits must not include AI co-author trailers.
-Future README rewrites should preserve this structure and only add new
-Ko-fi/support content when explicitly requested.
-Before pushing, check configured GitHub Actions and Dependabot status for
-failures, open update PRs, or open security alerts. As of 2026-07-24 there are
-no open security alerts; update PRs #3 (GitHub Actions) and #8 (`ruff`) remain
-open with green CI. Version `0.1.3` includes the dependency lock refresh made
-for patched `idna`, `requests`, and `urllib3` releases.
 
 ---
 
