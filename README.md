@@ -358,7 +358,9 @@ Pushing a `vX.Y.Z` tag publishes to PyPI. The workflow authenticates with a [Tru
 #    regenerate the screenshots if the CLI or dashboard changed
 uv run python scripts/render_help_svg.py
 uv run python scripts/render_dashboard_svg.py
-node scripts/svg2png.mjs
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm render-images
 
 # 3. Verify
 uv run ruff check && uv run pytest -q && uv build

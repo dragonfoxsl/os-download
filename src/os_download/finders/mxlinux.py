@@ -30,6 +30,5 @@ class MXLinuxFinder(BaseOSFinder):
                     }
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
         return {"download_page": self.sf_final}

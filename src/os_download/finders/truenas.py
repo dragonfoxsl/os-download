@@ -24,7 +24,6 @@ class TrueNASFinder(BaseOSFinder):
             version = tag.replace("TrueNAS-SCALE-", "").strip() or None
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
         if not version:
             version = "25.04.1"

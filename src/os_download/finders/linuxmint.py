@@ -37,5 +37,4 @@ class LinuxMintFinder(BaseOSFinder):
                 return {"cinnamon": url}
         except Exception as exc:
             self.log_failure(exc)
-            pass
         return {"download_page": "https://linuxmint.com/download.php"}

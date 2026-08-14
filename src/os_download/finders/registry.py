@@ -2,7 +2,7 @@ import io
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import redirect_stdout
+from contextlib import nullcontext, redirect_stdout
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -118,26 +118,17 @@ class MultiOSDownloadFinder:
         if not valid:
             return {}
 
-        if quiet:
-            with ThreadPoolExecutor(max_workers=len(valid)) as executor:
-                futures = {executor.submit(run_finder, self.finders[name]): name for name in valid}
-                for future in as_completed(futures):
-                    name = futures[future]
-                    links, _ = future.result()
-                    results[name] = links
-                    logger.info(
-                        "FINDER  %-14s  links=%d  %s", name, len(links), list(links.keys())
-                    )
-        else:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold cyan]{task.description:<20}"),
-                TextColumn("{task.fields[status]}"),
-                TimeElapsedColumn(),
-                console=console,
-                transient=False,
-            ) as progress:
-                task_ids = {
+        progress_context = nullcontext(None) if quiet else Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description:<20}"),
+            TextColumn("{task.fields[status]}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        )
+        with progress_context as progress:
+            task_ids = (
+                {
                     name: progress.add_task(
                         self.finders[name].name,
                         status="[dim]searching...[/dim]",
@@ -145,33 +136,35 @@ class MultiOSDownloadFinder:
                     )
                     for name in valid
                 }
+                if progress
+                else {}
+            )
 
-                try:
-                    with ThreadPoolExecutor(max_workers=len(valid)) as executor:
-                        futures = {executor.submit(run_finder, self.finders[name]): name for name in valid}
-                        for future in as_completed(futures):
-                            name = futures[future]
-                            links, _ = future.result()
-                            results[name] = links
-                            logger.info(
-                                "FINDER  %-14s  links=%d  %s",
-                                name,
-                                len(links),
-                                list(links.keys()),
+            try:
+                with ThreadPoolExecutor(max_workers=len(valid)) as executor:
+                    futures = {
+                        executor.submit(run_finder, self.finders[name]): name for name in valid
+                    }
+                    for future in as_completed(futures):
+                        name = futures[future]
+                        links, _ = future.result()
+                        results[name] = links
+                        logger.info(
+                            "FINDER  %-14s  links=%d  %s", name, len(links), list(links.keys())
+                        )
+
+                        if progress:
+                            status = (
+                                f"[green]✓ {', '.join(links)}[/green]"
+                                if links
+                                else "[red]✗ not found[/red]"
                             )
-
-                            if links:
-                                variants = ", ".join(links.keys())
-                                status = f"[green]✓ {variants}[/green]"
-                            else:
-                                status = "[red]✗ not found[/red]"
-
-                            progress.update(
-                                task_ids[name], status=status, completed=1, total=1
-                            )
-                except KeyboardInterrupt:
-                    console.print("\n[yellow]⏸  Interrupted — returning partial results.[/]")
-                    logger.warning("FINDER INTERRUPTED by user")
+                            progress.update(task_ids[name], status=status, completed=1, total=1)
+            except KeyboardInterrupt:
+                if quiet:
+                    raise
+                console.print("\n[yellow]⏸  Interrupted — returning partial results.[/]")
+                logger.warning("FINDER INTERRUPTED by user")
 
         all_links: dict[str, dict[str, str]] = {}
         for name in valid:
