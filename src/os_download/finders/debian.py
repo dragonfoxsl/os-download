@@ -24,7 +24,6 @@ class DebianFinder(BaseOSFinder):
                     )
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
         try:
             response = self.session.get(
@@ -40,12 +39,5 @@ class DebianFinder(BaseOSFinder):
                     )
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
-        verified = {}
-        for variant, url in links.items():
-            if self.verify_download_url(url):
-                verified[variant] = url
-            else:
-                verified[variant] = url
-        return verified
+        return links

@@ -1,5 +1,6 @@
 from os_download.finders import registry
 from os_download.finders.arch import ArchLinuxFinder
+from os_download.finders.debian import DebianFinder
 from os_download.finders.fedora import FedoraFinder
 from os_download.finders.linuxmint import LinuxMintFinder
 from os_download.finders.opensuse import OpenSUSETumbleweedFinder
@@ -49,6 +50,35 @@ def test_fedora_returns_latest_workstation_and_server_isos():
         "server": (
             "https://download.fedoraproject.org/pub/fedora/linux/releases/"
             "42/Server/x86_64/iso/Fedora-Server-dvd-x86_64-42-1.1.iso"
+        ),
+    }
+
+
+def test_debian_returns_scraped_isos_without_rechecking_the_same_urls():
+    finder = DebianFinder(timeout=1)
+    finder.session = FakeSession(
+        {
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/": (
+                '<a href="debian-13.1.0-amd64-netinst.iso">netinst</a>'
+            ),
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/": (
+                '<a href="debian-13.1.0-amd64-DVD-1.iso">dvd</a>'
+            ),
+        }
+    )
+    def fail_verify(url):
+        raise AssertionError("scraped URLs should not be fetched twice")
+
+    finder.verify_download_url = fail_verify
+
+    assert finder.find_download_links() == {
+        "netinst": (
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/"
+            "debian-13.1.0-amd64-netinst.iso"
+        ),
+        "dvd": (
+            "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/"
+            "debian-13.1.0-amd64-DVD-1.iso"
         ),
     }
 

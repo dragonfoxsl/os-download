@@ -24,7 +24,6 @@ class FedoraFinder(BaseOSFinder):
                     return urljoin(base_url, f"{latest}/")
             except Exception as exc:
                 self.log_failure(exc)
-                pass
         return None
 
     def _find_variant(self, release_base: str, directory: str, pattern: str) -> str | None:
@@ -37,7 +36,6 @@ class FedoraFinder(BaseOSFinder):
                 return urljoin(iso_base, match.group(1))
         except Exception as exc:
             self.log_failure(exc)
-            pass
         return None
 
     def find_download_links(self) -> dict[str, str]:

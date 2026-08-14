@@ -25,7 +25,6 @@ class UbuntuFinder(BaseOSFinder):
                 return latest, lts
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
         try:
             response = self.session.get(self.base_url, timeout=self.timeout)
@@ -43,7 +42,6 @@ class UbuntuFinder(BaseOSFinder):
                 return latest, lts
         except Exception as exc:
             self.log_failure(exc)
-            pass
 
         return None, None
 
@@ -65,7 +63,6 @@ class UbuntuFinder(BaseOSFinder):
                         links[key] = urljoin(base_url, match.group(1))
         except Exception as exc:
             self.log_failure(exc)
-            pass
         return links
 
     def find_download_links(self) -> dict[str, str]:
