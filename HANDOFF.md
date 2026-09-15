@@ -3,7 +3,9 @@
 ## Current State
 
 - Package version: `0.1.4`.
-- CI tests Python 3.10 and 3.13, lints, and builds the package on pushes, pull requests, manual dispatches, and Fridays at `03:00 UTC`.
+- CI tests Python 3.10 and 3.13, lints, builds the package, and smoke-tests both CLIs on Linux, macOS, and Windows.
+- Release builds repeat locked lint/tests and smoke-test the built wheel before OIDC publication.
+- The mirror canary retries transient failures, preserves diagnostics, and closes stale alerts after recovery.
 - Dependabot checks Python and GitHub Actions dependencies weekly.
 
 ## Verification Baseline
@@ -18,9 +20,9 @@ pnpm audit --audit-level high
 
 ## Current Maintenance
 
-The Ponytail cleanup consolidates duplicated HTTP 416 tests and finder concurrency, removes Debian's ineffective URL recheck, drops redundant exception-handler `pass` statements, and trims duplicated maintenance guidance.
+The hardening branch closes the integrity and release gaps found in the audit: trusted-cache enforcement, validated resume ranges, atomic decompression, curl HTTP failure handling, safe output names, batch collision checks, deterministic finder diagnostics, official TrueNAS discovery, positive CLI numeric arguments, locked CI/release installs, cross-platform CLI smoke coverage, and Ruff 0.16.3.
 
-Verified locally: Ruff passed, 75 tests passed with 2 skipped, source and wheel builds succeeded, both CLI help commands ran, normal/quiet finder modes returned the same results, `pnpm audit` found no known vulnerabilities, and the locked image workflow rendered all four PNGs in a disposable copy.
+Verified locally: Ruff passed; Python 3.10 and 3.13 each passed 95 tests with 2 optional-backend skips; locked source and wheel builds succeeded; both CLIs ran from an isolated wheel install; all workflow YAML parsed; all 15 live finders resolved; and Python plus pnpm audits reported no known dependency vulnerabilities.
 
 ## Durable Notes
 

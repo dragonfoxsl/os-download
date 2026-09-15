@@ -1,8 +1,7 @@
-import io
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import nullcontext, redirect_stdout
+from contextlib import nullcontext
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -72,15 +71,12 @@ def prompt_override_url(os_name: str, session) -> str | None:
     return url
 
 
-def run_finder(finder: BaseOSFinder):
-    buffer = io.StringIO()
+def run_finder(finder: BaseOSFinder) -> dict[str, str]:
     try:
-        with redirect_stdout(buffer):
-            links = finder.find_download_links()
-    except Exception as exc:
-        buffer.write(f"Error: {exc}\n")
-        links = {}
-    return links, buffer.getvalue()
+        return finder.find_download_links()
+    except Exception:
+        logger.exception("FINDER ERROR  %s", finder.name)
+        return {}
 
 
 class MultiOSDownloadFinder:
@@ -147,7 +143,7 @@ class MultiOSDownloadFinder:
                     }
                     for future in as_completed(futures):
                         name = futures[future]
-                        links, _ = future.result()
+                        links = future.result()
                         results[name] = links
                         logger.info(
                             "FINDER  %-14s  links=%d  %s", name, len(links), list(links.keys())

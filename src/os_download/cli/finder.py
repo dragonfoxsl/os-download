@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from os_download import __version__
+from os_download.cli.common import positive_int
 from os_download.finders.base import ISO_EXTS, has_iso_link, url_kind
 from os_download.finders.registry import OS_CHOICES, MultiOSDownloadFinder
 from os_download.logging import setup_file_logger
@@ -69,6 +70,7 @@ def _run_check(finder: MultiOSDownloadFinder, os_list: list[str]) -> int:
             iso_count = sum(1 for url in links.values() if url.lower().endswith(ISO_EXTS))
             detail = f"{iso_count} ISO{'s' if iso_count != 1 else ''}" if iso_count else "Mido"
             console.print(f"  [green]✓[/] {display_name:<20} [dim]{detail}[/]")
+            logger.info("CHECK OK      %-14s  %s", name, list(links.values()))
         else:
             broken.append(display_name)
             reason = "no ISO link (only a download page)" if links else "nothing resolved"
@@ -113,7 +115,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--timeout",
-        type=int,
+        type=positive_int,
         default=15,
         help="HTTP request timeout in seconds (default: 15)",
     )

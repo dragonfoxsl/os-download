@@ -28,12 +28,37 @@ class BaseOSFinder:
         logger.debug("LOOKUP_FAILED  %-14s  %s  -  %s", self.name, context, exc)
 
     def verify_download_url(self, url: str) -> bool:
+        head_status = None
+        get_status = None
         try:
-            response = self.session.head(url, timeout=self.timeout, allow_redirects=True)
-            return response.status_code == 200
+            response = self.session.head(url, allow_redirects=True, timeout=self.timeout)
+            head_status = response.status_code
+            getattr(response, "close", lambda: None)()
+            if head_status == 200:
+                return True
+
+            response = self.session.get(
+                url,
+                headers={"Range": "bytes=0-0"},
+                stream=True,
+                allow_redirects=True,
+                timeout=self.timeout,
+            )
+            get_status = response.status_code
+            getattr(response, "close", lambda: None)()
+            if get_status in (200, 206):
+                return True
         except Exception as exc:
-            self.log_failure(exc, url)
+            logger.debug("URL verification failed for %s: %s", url, exc)
             return False
+
+        logger.warning(
+            "URL UNREACHABLE  %s  HEAD=%s GET=%s",
+            url,
+            head_status,
+            get_status,
+        )
+        return False
 
     def find_download_links(self) -> dict[str, str]:
         raise NotImplementedError

@@ -36,7 +36,7 @@ def download_with_curl(
         actual_total = (resume_pos + total_size) if total_size else None
         progress.update(task_id, total=actual_total, completed=resume_pos)
 
-    cmd = ["curl", "-L", "-s", "-S"]
+    cmd = ["curl", "--fail", "-L", "-s", "-S"]
     if resume_pos > 0:
         cmd.extend(["-C", "-"])
     cmd.extend(["-o", str(filepath), url])
@@ -52,7 +52,11 @@ def download_with_curl(
     while proc.poll() is None:
         if stop_event and stop_event.is_set():
             proc.terminate()
-            proc.wait(timeout=3)
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
             return False
         if progress is not None and task_id is not None and path.exists():
             try:
