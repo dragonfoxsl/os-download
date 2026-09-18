@@ -68,6 +68,11 @@ def test_an_unsigned_checksum_verifies_the_hash_but_is_not_trusted(tmp_path: Pat
     assert not report.trusted
     assert not report.corrupt
 
+    # An unsigned result must not become trusted merely because it was cached.
+    second = verify_download(None, iso, URL)
+    assert second.status is VerifyStatus.HASH_ONLY
+    assert not second.trusted
+
 
 def test_an_invalid_signature_is_fatal_even_when_the_hash_matches(tmp_path: Path, monkeypatch):
     iso = tmp_path / "image.iso"
@@ -78,3 +83,18 @@ def test_an_invalid_signature_is_fatal_even_when_the_hash_matches(tmp_path: Path
 
     assert report.status is VerifyStatus.SIGNATURE_INVALID
     assert report.corrupt
+
+
+def test_marker_write_replaces_a_symlink_without_following_it(tmp_path: Path):
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"payload")
+    target = tmp_path / "sensitive.txt"
+    target.write_text("keep", encoding="utf-8")
+    marker = marker_path(iso)
+    marker.symlink_to(target)
+
+    verification.write_marker(iso, "abc123", trusted=True)
+
+    assert target.read_text(encoding="utf-8") == "keep"
+    assert marker.is_file()
+    assert not marker.is_symlink()

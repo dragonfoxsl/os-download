@@ -55,6 +55,35 @@ class RangeHandler(BaseHTTPRequestHandler):
             self.wfile.write(PAYLOAD)
             return
 
+        if self.path == "/forbidden-404.iso":
+            if "curl" not in self.headers.get("User-Agent", "").lower():
+                self.send_response(403)
+                self.send_header("content-length", "0")
+            else:
+                self.send_response(404)
+                self.send_header("content-length", "10")
+            self.end_headers()
+            if "curl" in self.headers.get("User-Agent", "").lower():
+                self.wfile.write(b"not an iso")
+            return
+
+        if self.path in ("/bad-range.iso", "/malformed-range.iso"):
+            if self.headers.get("Range"):
+                self.send_response(206)
+                self.send_header("content-length", str(len(PAYLOAD)))
+                content_range = (
+                    f"bytes 0-{len(PAYLOAD) - 1}/{len(PAYLOAD)}"
+                    if self.path == "/bad-range.iso"
+                    else f"bytes 4096-1000/{len(PAYLOAD)}"
+                )
+                self.send_header("content-range", content_range)
+            else:
+                self.send_response(200)
+                self.send_header("content-length", str(len(PAYLOAD)))
+            self.end_headers()
+            self._write(PAYLOAD)
+            return
+
         if self.path == "/SHA256SUMS":
             body = SHA256SUMS.encode()
             self.send_response(200)
@@ -93,7 +122,14 @@ class RangeHandler(BaseHTTPRequestHandler):
         self._write(body)
 
     def do_HEAD(self):  # noqa: N802 - BaseHTTPRequestHandler API
-        self.send_response(200 if self.path in ("/file.iso", "/forbidden.iso") else 404)
+        known = (
+            "/file.iso",
+            "/forbidden.iso",
+            "/forbidden-404.iso",
+            "/bad-range.iso",
+            "/malformed-range.iso",
+        )
+        self.send_response(200 if self.path in known else 404)
         self.send_header("content-length", str(len(PAYLOAD)))
         self.end_headers()
 
@@ -128,6 +164,26 @@ def test_download_file_resumes_a_partial_file_without_refetching_it(tmp_path: Pa
     # "gzip, deflate" makes nginx ignore Range and serve the whole file, which turns every
     # resume into a silent full re-download; this is what catches that regression.
     assert RangeHandler.served == len(PAYLOAD) - 4096
+
+
+def test_download_file_restarts_when_server_returns_the_wrong_range(tmp_path: Path, server: str):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+    partial = tmp_path / "bad-range.iso"
+    partial.write_bytes(PAYLOAD[:4096])
+
+    assert manager.download_file(f"{server}/bad-range.iso", resume=True, decompress=False)
+    assert partial.read_bytes() == PAYLOAD
+    assert RangeHandler.served == len(PAYLOAD) * 2
+
+
+def test_download_file_restarts_when_content_range_is_malformed(tmp_path: Path, server: str):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+    partial = tmp_path / "malformed-range.iso"
+    partial.write_bytes(PAYLOAD[:4096])
+
+    assert manager.download_file(f"{server}/malformed-range.iso", resume=True, decompress=False)
+    assert partial.read_bytes() == PAYLOAD
+    assert RangeHandler.served == len(PAYLOAD) * 2
 
 
 def test_the_session_does_not_negotiate_a_content_coding(tmp_path: Path, server: str):
@@ -189,12 +245,48 @@ def test_download_file_rejects_an_unsigned_checksum_under_require_signature(
     assert not manager.download_file(f"{server}/file.iso", verify=True, decompress=False)
 
 
+def test_cached_unsigned_checksum_remains_rejected_under_require_signature(
+    tmp_path: Path, server: str
+):
+    lenient = DownloadManager(download_dir=str(tmp_path), backend="python")
+    assert lenient.download_file(f"{server}/file.iso", verify=True, decompress=False)
+
+    strict = DownloadManager(download_dir=str(tmp_path), require_signature=True, backend="python")
+    assert not strict.download_file(f"{server}/file.iso", verify=True, decompress=False)
+
+
 @pytest.mark.skipif(shutil.which("curl") is None, reason="curl is not installed")
 def test_download_file_falls_back_to_curl_on_403(tmp_path: Path, server: str):
     manager = DownloadManager(download_dir=str(tmp_path), backend="python")
 
     assert manager.download_file(f"{server}/forbidden.iso", decompress=False)
     assert (tmp_path / "forbidden.iso").read_bytes() == PAYLOAD
+
+
+@pytest.mark.skipif(shutil.which("curl") is None, reason="curl is not installed")
+def test_curl_fallback_rejects_http_error_bodies(tmp_path: Path, server: str):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python", max_retries=1)
+
+    assert not manager.download_file(f"{server}/forbidden-404.iso", decompress=False)
+    output = tmp_path / "forbidden-404.iso"
+    assert not output.exists() or output.read_bytes() != b"not an iso"
+
+
+def test_download_file_rejects_output_paths(tmp_path: Path, server: str):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+
+    assert not manager.download_file(f"{server}/file.iso", filename="../escape.iso")
+    assert not (tmp_path.parent / "escape.iso").exists()
+
+
+def test_download_file_refuses_to_overwrite_a_symlink(tmp_path: Path, server: str):
+    target = tmp_path / "target.iso"
+    target.write_bytes(b"keep me")
+    (tmp_path / "output.iso").symlink_to(target)
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+
+    assert not manager.download_file(f"{server}/file.iso", filename="output.iso")
+    assert target.read_bytes() == b"keep me"
 
 
 @pytest.mark.skipif(shutil.which("aria2c") is None, reason="aria2c is not installed")

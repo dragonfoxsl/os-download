@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.console import Console
 
 from os_download import __version__
+from os_download.cli.common import positive_int
 from os_download.downloader.aria2 import aria2_available
 from os_download.downloader.manager import DownloadManager
 from os_download.downloader.paths import default_download_dir
@@ -59,7 +60,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--parallel",
-        type=int,
+        type=positive_int,
         default=1,
         metavar="N",
         help="Number of simultaneous downloads (default: 1)",
@@ -75,21 +76,21 @@ def main() -> None:
     )
     parser.add_argument(
         "--connections",
-        type=int,
+        type=positive_int,
         default=8,
         metavar="N",
         help="Connections per file when using aria2c (default: 8)",
     )
     parser.add_argument(
         "--retries",
-        type=int,
+        type=positive_int,
         default=3,
         metavar="N",
         help="Attempts per file before giving up; a retry resumes (default: 3)",
     )
     parser.add_argument(
         "--chunk-size",
-        type=int,
+        type=positive_int,
         default=8192,
         help="Download chunk size in bytes (default: 8192)",
     )

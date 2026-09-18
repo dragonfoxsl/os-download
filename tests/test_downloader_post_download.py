@@ -1,5 +1,4 @@
 import gzip
-import os
 import threading
 import time
 from pathlib import Path
@@ -8,7 +7,7 @@ import pytest
 from rich.console import Console
 from rich.progress import Progress
 
-from os_download.downloader.manager import MIN_COMPLETE_BYTES, DownloadManager
+from os_download.downloader.manager import DownloadManager
 from os_download.downloader.ui import SessionDashboard, SessionState
 from os_download.downloader.verification import VerifyReport, VerifyStatus
 
@@ -313,30 +312,13 @@ def test_download_from_file_honors_parallel_batch_dispatch(tmp_path: Path, monke
     assert max_inflight >= 2
 
 
-def test_download_from_file_skips_recent_completed_files_by_default(tmp_path: Path, monkeypatch):
-    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
-    url = "https://example.test/recent.iso"
-    filepath = tmp_path / "recent.iso"
-    filepath.write_bytes(b"x" * MIN_COMPLETE_BYTES)
-
-    monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
-    monkeypatch.setattr("builtins.input", lambda *args: "")
-    monkeypatch.setattr(
-        manager,
-        "download_file",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("recent file should be skipped")),
-    )
-
-    assert manager.download_from_file("ignored.txt", interactive=True, parallel=1)
-
-
-def test_download_from_file_does_not_treat_tiny_file_as_a_completed_download(
+def test_download_from_file_resumes_recent_large_files_instead_of_assuming_complete(
     tmp_path: Path, monkeypatch
 ):
     manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/recent.iso"
-    # What a mirror's HTML error page looks like on disk: recent, non-empty, far too small.
-    (tmp_path / "recent.iso").write_bytes(b"<html>404 Not Found</html>")
+    filepath = tmp_path / "recent.iso"
+    filepath.write_bytes(b"x" * 1_048_576)
     calls = []
 
     monkeypatch.setattr(manager, "_read_urls", lambda path: [url])
@@ -351,15 +333,13 @@ def test_download_from_file_does_not_treat_tiny_file_as_a_completed_download(
     assert calls == [url]
 
 
-def test_download_from_file_can_restart_older_partial_files_from_scratch(
+def test_download_from_file_can_restart_partial_files_from_scratch(
     tmp_path: Path, monkeypatch
 ):
     manager = DownloadManager(download_dir=str(tmp_path), backend="python")
     url = "https://example.test/partial.iso"
     filepath = tmp_path / "partial.iso"
     filepath.write_bytes(b"partial")
-    old = time.time() - (2 * 86400)
-    os.utime(filepath, (old, old))
 
     prompts = iter(["n"])
     printed = []
@@ -392,6 +372,34 @@ def test_download_from_file_can_restart_older_partial_files_from_scratch(
         for prompt in printed
     )
     assert calls == [(url, False)]
+
+
+def test_download_from_file_rejects_duplicate_output_names(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+    urls = ["https://one.test/image.iso", "https://two.test/image.iso"]
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(
+        manager,
+        "download_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must reject first")),
+    )
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=2)
+
+
+def test_download_from_file_rejects_payload_and_sidecar_name_collisions(
+    tmp_path: Path, monkeypatch
+):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python")
+    urls = ["https://one.test/image.iso", "https://two.test/image.iso.verified"]
+    monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
+    monkeypatch.setattr(
+        manager,
+        "download_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must reject first")),
+    )
+
+    assert not manager.download_from_file("ignored.txt", interactive=False, parallel=2)
 
 
 def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Path, monkeypatch):

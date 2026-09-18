@@ -7,6 +7,8 @@ regardless of whether the bytes happen to match.
 
 import json
 import logging
+import os
+import tempfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -76,9 +78,25 @@ def read_marker(filepath: Path) -> dict | None:
 
 def write_marker(filepath: Path, digest: str, trusted: bool) -> None:
     record = {**_fingerprint(filepath), "sha256": digest, "trusted": trusted}
+    marker = marker_path(filepath)
+    temporary: Path | None = None
     try:
-        marker_path(filepath).write_text(json.dumps(record), encoding="utf-8")
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=marker.parent,
+            prefix=f".{marker.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as target:
+            temporary = Path(target.name)
+            json.dump(record, target)
+            target.flush()
+            os.fsync(target.fileno())
+        temporary.replace(marker)
     except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
         logger.debug("MARKER WRITE FAILED  %s  -  %s", filepath.name, exc)
 
 
@@ -97,13 +115,12 @@ def verify_download(
 ) -> VerifyReport:
     if use_cache:
         cached = read_marker(filepath)
-        if cached is not None:
+        if cached is not None and cached.get("trusted") is True:
             # Re-hashing several GB on every run costs minutes and proves nothing new.
             logger.info("VERIFY CACHED  %s", filepath.name)
             return VerifyReport(
                 VerifyStatus.CACHED,
-                "already verified and unchanged since"
-                + ("" if cached.get("trusted") else " (hash only, unsigned)"),
+                "already verified and unchanged since",
             )
 
     source = resolve_checksum(session, filepath, url)

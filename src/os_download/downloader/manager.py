@@ -1,6 +1,8 @@
 import logging
+import re
 import threading
 import time
+from collections.abc import Mapping
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor
 from concurrent.futures import wait as cf_wait
 from enum import Enum
@@ -41,10 +43,26 @@ from os_download.http import get_session
 console = Console()
 logger = logging.getLogger("os_download")
 
-# A file smaller than this is a truncated download or a mirror's HTML error page, never an ISO.
-MIN_COMPLETE_BYTES = 1_048_576
+_CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+|\*)$")
 
-RECENT_SECONDS = 86400
+
+def _resume_body_size(headers: Mapping[str, str], expected_start: int) -> int | None:
+    match = _CONTENT_RANGE.fullmatch(headers.get("content-range", ""))
+    if match is None:
+        return None
+
+    start, end = int(match.group(1)), int(match.group(2))
+    if start != expected_start or end < start:
+        return None
+    if match.group(3) != "*" and int(match.group(3)) <= end:
+        return None
+
+    expected_size = end - start + 1
+    try:
+        content_length = int(headers.get("content-length", expected_size))
+    except ValueError:
+        return None
+    return expected_size if content_length == expected_size else None
 
 
 class Outcome(Enum):
@@ -111,6 +129,20 @@ class DownloadManager:
         if decompress and filepath.suffix.lower() in (".bz2", ".gz"):
             return filepath.with_suffix("")
         return filepath
+
+    def _reserved_output_paths(self, url: str, decompress: bool) -> set[Path]:
+        payload = self.download_dir / self.get_filename_from_url(url)
+        final = self._final_filepath(url, decompress)
+        reserved = {payload, final}
+        for filepath in (payload, final):
+            reserved.update(
+                {
+                    filepath.with_name(filepath.name + CONTROL_SUFFIX),
+                    filepath.with_name(filepath.name + ".verified"),
+                    filepath.with_name(filepath.name + ".corrupt"),
+                }
+            )
+        return reserved
 
     def _download_with_mido(self, variant: str) -> bool:
         return download_with_mido(variant, self.download_dir)
@@ -242,8 +274,21 @@ class DownloadManager:
         machinery already knows how to pick it up, so retry here rather than failing the
         file and making the user re-run the command.
         """
-        if not filename:
+        if filename:
+            requested = Path(filename)
+            if requested.name != filename or filename in (".", ".."):
+                logger.error("INVALID OUTPUT FILENAME  %s", filename)
+                if progress is None:
+                    console.print("[red]Output must be a filename, not a path.[/]")
+                return False
+        else:
             filename = self.get_filename_from_url(url)
+
+        if (self.download_dir / filename).is_symlink():
+            logger.error("REFUSING OUTPUT SYMLINK  %s", filename)
+            if progress is None:
+                console.print(f"[red]Refusing to overwrite symlink:[/] {filename}")
+            return False
 
         for attempt in range(1, self.max_retries + 1):
             outcome = self._attempt_download(
@@ -329,7 +374,7 @@ class DownloadManager:
 
             if response.status_code == 403:
                 try:
-                    response.close()
+                    getattr(response, "close", lambda: None)()
                 except Exception:
                     pass
                 logger.info("CURL_FALLBACK  %s  (403 from requests)", url)
@@ -348,6 +393,21 @@ class DownloadManager:
                     return Outcome.RETRYABLE
                 return self._finish(filepath, url, verify, decompress, own_progress)
 
+            expected_body_size: int | None = None
+            if resume_pos > 0 and response.status_code == 206:
+                content_range = response.headers.get("content-range", "")
+                expected_body_size = _resume_body_size(response.headers, resume_pos)
+                if expected_body_size is None:
+                    logger.warning(
+                        "INVALID RESUME RANGE  %s  requested=%d returned=%s",
+                        url,
+                        resume_pos,
+                        content_range or "missing",
+                    )
+                    getattr(response, "close", lambda: None)()
+                    resume_pos = 0
+                    response = self.session.get(url, stream=True, timeout=30)
+
             if resume_pos > 0 and response.status_code != 206:
                 if response.status_code == 416:
                     try:
@@ -356,10 +416,12 @@ class DownloadManager:
                     except Exception:
                         server_size = 0
                     if server_size > 0 and filepath.stat().st_size == server_size:
+                        getattr(response, "close", lambda: None)()
                         if not own_progress and task_id is not None and progress is not None:
                             progress.update(task_id, total=server_size, completed=server_size)
                         logger.info("ALREADY_COMPLETE  %s", filepath.name)
                         return self._finish(filepath, url, verify, decompress, own_progress)
+                getattr(response, "close", lambda: None)()
                 resume_pos = 0
                 response = self.session.get(url, stream=True, timeout=30)
 
@@ -386,6 +448,7 @@ class DownloadManager:
                 progress.update(task_id, total=total, completed=resume_pos)
 
             stopped_early = False
+            received = 0
             mode = "ab" if resume_pos > 0 else "wb"
             with open(filepath, mode) as handle:
                 for chunk in response.iter_content(chunk_size=self.chunk_size):
@@ -394,8 +457,21 @@ class DownloadManager:
                         break
                     if chunk:
                         handle.write(chunk)
+                        received += len(chunk)
                         if progress is not None and task_id is not None:
                             progress.update(task_id, advance=len(chunk))
+            getattr(response, "close", lambda: None)()
+
+            if (
+                not stopped_early
+                and expected_body_size is not None
+                and received != expected_body_size
+            ):
+                with open(filepath, "r+b") as handle:
+                    handle.truncate(resume_pos)
+                raise requests.RequestException(
+                    f"resume body was {received} bytes; expected {expected_body_size}"
+                )
 
             if own_progress and progress is not None:
                 progress.stop()
@@ -439,58 +515,11 @@ class DownloadManager:
             return True
         return aria2_available()
 
-    def _looks_complete(self, filepath: Path) -> bool:
-        return filepath.exists() and filepath.stat().st_size >= MIN_COMPLETE_BYTES
-
-    def _prompt_recent_files(self, urls: list[str], decompress: bool) -> tuple[set[str], set[str]]:
-        """Ask whether recently downloaded files should be fetched again.
-
-        Returns the URLs to skip, and the URLs recognised as recent.
-        """
-        recent: list[tuple[str, str, float]] = []
-        for url in urls:
-            filepath = self._final_filepath(url, decompress)
-            if self._looks_complete(filepath):
-                age = time.time() - filepath.stat().st_mtime
-                if age < RECENT_SECONDS:
-                    recent.append((url, filepath.name, age))
-
-        if not recent:
-            return set(), set()
-
-        recent_urls = {url for url, _, _ in recent}
-        count = len(recent)
-        console.print(
-            f"\n  [green]{count} file{'s' if count != 1 else ''} already downloaded "
-            f"in the last 24 hours:[/green]"
-        )
-        for _, filename, age in recent:
-            hours, remainder = divmod(int(age), 3600)
-            minutes = remainder // 60
-            console.print(f"    [dim]·[/dim] {filename}  [dim]({hours}h {minutes:02d}m ago)[/dim]")
-        console.print("  Re-download anyway? [dim](y = yes / N = skip)[/dim]  ", end="")
-
-        try:
-            answer = input().strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-
-        if answer not in ("y", "yes"):
-            return recent_urls, recent_urls
-
-        for url in recent_urls:
-            try:
-                self._final_filepath(url, decompress).unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning("UNLINK FAILED  %s  -  %s", url, exc)
-        return set(), recent_urls
-
-    def _prompt_resume_partials(self, urls: list[str], recent_urls: set[str]) -> bool:
+    def _prompt_resume_partials(self, urls: list[str]) -> bool:
         partial = [
             url
             for url in urls
-            if url not in recent_urls
-            and (self.download_dir / self.get_filename_from_url(url)).exists()
+            if (self.download_dir / self.get_filename_from_url(url)).exists()
         ]
         if not partial:
             return True
@@ -650,12 +679,19 @@ class DownloadManager:
         mido_urls = [url for url in all_urls if url.startswith("mido://")]
         urls = [url for url in all_urls if not url.startswith("mido://")]
 
-        urls_to_skip: set[str] = set()
-        recent_urls: set[str] = set()
-        if interactive:
-            urls_to_skip, recent_urls = self._prompt_recent_files(urls, decompress)
+        destinations: dict[Path, str] = {}
+        for url in urls:
+            for destination in self._reserved_output_paths(url, decompress):
+                if destination in destinations:
+                    console.print(
+                        f"[red]Download outputs collide:[/] {destination.name}"
+                    )
+                    logger.error("OUTPUT COLLISION  %s", destination)
+                    return False
+                destinations[destination] = url
+
         if resume and interactive:
-            resume = self._prompt_resume_partials(urls, recent_urls)
+            resume = self._prompt_resume_partials(urls)
 
         mido_success = 0
         mido_failed = 0
@@ -665,10 +701,8 @@ class DownloadManager:
             else:
                 mido_failed += 1
 
-        urls_to_try = [url for url in urls if url not in urls_to_skip]
+        urls_to_try = urls
         if not urls_to_try:
-            if not mido_urls:
-                console.print("[green]All files are recent; nothing to download.[/]")
             return mido_success == len(mido_urls)
 
         total_success = 0

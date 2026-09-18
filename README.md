@@ -41,7 +41,7 @@ os-download        # download everything that was found, verifying as it goes
 | **Fedora** | fedoraproject.org mirrors | Yes (Workstation + Server) | `.iso` | **Signed** (distro keyring) |
 | **OPNsense** | pkg.opnsense.org | Yes | `.iso.bz2` (auto-extracted) | SHA256 if published |
 | **pfSense CE** | Netgate CDN | Yes | `.iso.gz` (auto-extracted) | SHA256 |
-| **TrueNAS Scale** | GitHub Releases API | Yes | `.iso` | SHA256 if published |
+| **TrueNAS Scale** | truenas.com official download page | Yes | `.iso` | SHA256 if published |
 | **Manjaro KDE** | manjaro.org/products | Yes | `.iso` | SHA256 if published |
 | **MX Linux** | mxlinux.org / SourceForge | Yes (Xfce x64) | `.iso` | SHA256 if published |
 | **Puppy Linux** | SourceForge CDN → ibiblio fallback | Yes (fossapup64) | `.iso` | SHA256 if published |
@@ -126,7 +126,7 @@ uv tool install git+https://github.com/dragonfoxsl/os-download
 ```bash
 git clone https://github.com/dragonfoxsl/os-download
 cd os-download
-uv sync
+uv sync --locked
 
 # Run from the project directory
 uv run os-finder
@@ -195,7 +195,7 @@ os-download --url "https://example.com/file.iso"
 os-download --no-decompress
 ```
 
-Interrupted downloads resume where they left off — re-run the same command. A dropped connection is retried automatically without failing the file.
+Interrupted downloads resume where they left off — re-run the same command. A dropped connection is retried automatically without failing the file. `--output` accepts a filename only; use `--dir` to choose its directory. Batch downloads stop before transfer when multiple URLs resolve to the same filename.
 
 ### Keyboard shortcuts (download dashboard)
 
@@ -216,7 +216,9 @@ When downloading multiple files, os-download shows a live dashboard:
 
 On completion the dashboard transitions to a summary panel showing files downloaded, total data, time taken, and any failures. If downloads fail you are prompted to retry them; the retry runs only the failed files.
 
-At startup, if partial files are detected you are prompted to resume or start from scratch. Files downloaded within the last 24 hours are listed and can be skipped.
+At startup, if an existing file is detected you are prompted to resume or start from scratch.
+The server's byte range is validated before anything is appended; a malformed resume response
+is discarded and restarted safely.
 
 ### Screenshots
 
@@ -252,8 +254,9 @@ Every download is verified by default. Two things are checked, in this order:
 | No checksum published | Nothing to check against | Succeeds with a warning (fails under `--require-signature`) |
 
 A file that fails verification is renamed to `<name>.corrupt` rather than left in place, so a
-later resume cannot append to bad bytes. Verified files record a `.verified` marker, so a
-multi-gigabyte ISO is not re-hashed on every run.
+later resume cannot append to bad bytes. Authentically verified files record a `.verified`
+marker, so a multi-gigabyte ISO is not re-hashed on every run. Unsigned hash-only results are
+always checked again and never satisfy `--require-signature` through the cache.
 
 Signature verification needs `gpg` on `PATH`; without it, verification falls back to
 hash-only and says so.
@@ -363,7 +366,7 @@ pnpm exec playwright install chromium
 pnpm render-images
 
 # 3. Verify
-uv run ruff check && uv run pytest -q && uv build
+uv sync --locked && uv run ruff check && uv run pytest -q && uv build
 
 # 4. Tag and push
 git tag -a v0.1.4 -m "os-download 0.1.4" && git push origin v0.1.4
