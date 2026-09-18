@@ -131,7 +131,7 @@ def main() -> None:
 
     if not Path(args.file).exists():
         console.print(f"[red]✗ URL file not found:[/] {args.file}")
-        console.print("[dim]Run the OS finder first: uv run os-finder[/]")
+        console.print("[dim]Run the OS finder first: os-finder[/]")
         sys.exit(1)
 
     success = manager.download_from_file(

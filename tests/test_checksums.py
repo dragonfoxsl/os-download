@@ -54,6 +54,22 @@ def test_verify_checksum_matches_sha256sums(tmp_path: Path):
     assert verify_checksum(session, file_path, "https://example.test/ubuntu.iso") is True
 
 
+def test_verify_checksum_uses_the_published_name_when_output_is_renamed(tmp_path: Path):
+    file_path = tmp_path / "renamed.iso"
+    file_path.write_bytes(b"ubuntu")
+    session = FakeSession(
+        {
+            "https://example.test/image.iso.sha256": FakeResponse(404),
+            "https://example.test/SHA256SUMS": FakeResponse(
+                200,
+                "7804a56a5c7636cc05814736f44139e32920810d3bd51aa099a5df932e754ce9 *image.iso\n",
+            ),
+        }
+    )
+
+    assert verify_checksum(session, file_path, "https://example.test/image.iso") is True
+
+
 def test_verify_checksum_returns_none_when_no_checksum_exists(tmp_path: Path):
     file_path = tmp_path / "unknown.iso"
     file_path.write_bytes(b"data")

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from rich.progress import Progress, TaskID
 
+from os_download.http import USER_AGENT
+
 logger = logging.getLogger("os_download")
 
 
@@ -24,7 +26,12 @@ def download_with_curl(
 
     total_size: int | None = None
     try:
-        head = subprocess.run(["curl", "-sIL", url], capture_output=True, text=True, timeout=20)
+        head = subprocess.run(
+            ["curl", "--user-agent", USER_AGENT, "-sIL", "--", url],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
         for line in reversed(head.stdout.splitlines()):
             if line.lower().startswith("content-length:"):
                 total_size = int(line.split(":", 1)[1].strip())
@@ -33,13 +40,12 @@ def download_with_curl(
         pass
 
     if progress is not None and task_id is not None:
-        actual_total = (resume_pos + total_size) if total_size else None
-        progress.update(task_id, total=actual_total, completed=resume_pos)
+        progress.update(task_id, total=total_size, completed=resume_pos)
 
-    cmd = ["curl", "--fail", "-L", "-s", "-S"]
+    cmd = ["curl", "--user-agent", USER_AGENT, "--fail", "-L", "-s", "-S"]
     if resume_pos > 0:
         cmd.extend(["-C", "-"])
-    cmd.extend(["-o", str(filepath), url])
+    cmd.extend(["-o", str(filepath), "--", url])
 
     try:
         proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)

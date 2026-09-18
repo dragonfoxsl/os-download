@@ -13,6 +13,7 @@ node_modules/
 
 # Generated output files
 all_os_links.txt
+os-links/
 logs/
 
 # Exclude the contents of the downloads folder

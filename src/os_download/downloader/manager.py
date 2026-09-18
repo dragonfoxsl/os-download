@@ -369,6 +369,7 @@ class DownloadManager:
         resume_pos = self.get_resume_position(filepath) if resume else 0
         headers = {"Range": f"bytes={resume_pos}-"} if resume_pos > 0 else {}
 
+        response = None
         try:
             response = self.session.get(url, headers=headers, stream=True, timeout=30)
 
@@ -490,6 +491,12 @@ class DownloadManager:
                 console.print(f"[red]Download failed:[/] {exc}")
             logger.error("FAILED  %s  -  %s", url, exc)
             return Outcome.RETRYABLE
+        finally:
+            if response is not None:
+                try:
+                    response.close()
+                except Exception:
+                    pass
 
     def _finish(
         self, filepath: Path, url: str, verify: bool, decompress: bool, own_progress: bool

@@ -179,7 +179,7 @@ def main() -> None:
         Panel(
             f"  [green]✓[/]  [bold]{iso_count} ISO URL{'s' if iso_count != 1 else ''}[/] "
             f"saved to [cyan]{args.output}[/]\n"
-            f"  Run [bold cyan]uv run os-download[/] to start downloading",
+            f"  Run [bold cyan]os-download[/] to start downloading",
             title="[bold green]Ready[/]",
             border_style="green",
             expand=False,
