@@ -376,6 +376,12 @@ Get the README right *before* tagging: the PyPI project page is baked in at uplo
 
 ---
 
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull-request checks. Report suspected vulnerabilities privately by following [SECURITY.md](SECURITY.md).
+
+---
+
 ## Credits
 
 | Project | Role |
