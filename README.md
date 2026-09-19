@@ -195,7 +195,7 @@ os-download --url "https://example.com/file.iso"
 os-download --no-decompress
 ```
 
-Interrupted downloads resume where they left off — re-run the same command. A dropped connection is retried automatically without failing the file. `--output` accepts a filename only; use `--dir` to choose its directory. Batch downloads stop before transfer when multiple URLs resolve to the same filename.
+Interrupted downloads resume where they left off — re-run the same command. A dropped connection is retried automatically without failing the file. `--no-resume` removes both ordinary and aria2 partial state before the first attempt. `--output` accepts a filename only; use `--dir` to choose its directory. Batch downloads stop before transfer when multiple URLs resolve to the same filename.
 
 ### Keyboard shortcuts (download dashboard)
 

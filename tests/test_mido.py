@@ -33,3 +33,37 @@ def test_download_with_mido_suppresses_tool_output_and_warns_on_failure(
     assert run_kwargs["text"] is True
     assert any("Mido failed for win11x64" in message for message in printed)
     assert not any("curl" in message.lower() for message in printed)
+
+
+def test_ensure_mido_restores_a_modified_cached_script(tmp_path: Path, monkeypatch):
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    script = tmp_path / "Mido.sh"
+    script.write_text("safe\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "Mido.sh"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        check=True,
+    )
+    ref = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    script.write_text("modified\n", encoding="utf-8")
+    monkeypatch.setattr(mido, "mido_ref", lambda: ref)
+
+    assert mido.ensure_mido(tmp_path) == script
+    assert script.read_text(encoding="utf-8") == "safe\n"

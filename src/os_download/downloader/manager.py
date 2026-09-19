@@ -158,12 +158,15 @@ class DownloadManager:
     ) -> bool:
         return download_with_curl(url, filepath, resume_pos, progress, task_id, stop_event)
 
-    def _discard_partial(self, filepath: Path) -> None:
+    def _discard_partial(self, filepath: Path) -> bool:
+        removed = True
         for path in (filepath, filepath.with_name(filepath.name + CONTROL_SUFFIX)):
             try:
                 path.unlink(missing_ok=True)
             except OSError as exc:
+                removed = False
                 logger.warning("DISCARD FAILED  %s  -  %s", path.name, exc)
+        return removed
 
     def _quarantine(self, filepath: Path) -> Path | None:
         """Move a file that failed verification aside so a later resume cannot extend it."""
@@ -336,6 +339,9 @@ class DownloadManager:
 
         logger.info("START  %s  ->  %s", url, filepath)
 
+        if not resume and not self._discard_partial(filepath):
+            return Outcome.FATAL
+
         if self._use_aria2(filepath):
             if own_progress:
                 progress = self._single_file_progress()
@@ -363,7 +369,8 @@ class DownloadManager:
             # existing bytes unsafe to append to, so start the file again rather than
             # resume it into a corrupt image.
             logger.warning("ARIA2 PARTIAL DISCARDED  %s  (restarting without aria2)", filename)
-            self._discard_partial(filepath)
+            if not self._discard_partial(filepath):
+                return Outcome.FATAL
             resume = False
 
         resume_pos = self.get_resume_position(filepath) if resume else 0
@@ -544,13 +551,6 @@ class DownloadManager:
             answer = ""
         return answer not in ("n", "no")
 
-    def _prompt_skip(self) -> bool:
-        try:
-            answer = input("\nSkip this file and continue? [dim](Y/n)[/dim] ").strip().lower()
-        except KeyboardInterrupt:
-            return False
-        return answer not in ("n", "no")
-
     def _prompt_retry(self, failed: list[str]) -> bool:
         count = len(failed)
         console.print()
@@ -641,10 +641,6 @@ class DownloadManager:
                         state.record(url, ok)
                         dashboard.update()
 
-                        if not ok and interactive and parallel == 1 and not self._prompt_skip():
-                            self._cancel(pending, stop_event)
-                            pending = set()
-                            break
             except KeyboardInterrupt:
                 state.interrupted = True
                 logger.warning("SESSION INTERRUPTED by user")

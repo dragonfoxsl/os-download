@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from os_download.finders.arch import ArchLinuxFinder
-from os_download.finders.base import ISO_EXTS, BaseOSFinder, has_iso_link
+from os_download.finders.base import BaseOSFinder, has_iso_link, is_iso_url
 from os_download.finders.cachyos import CachyOSFinder
 from os_download.finders.debian import DebianFinder
 from os_download.finders.fedora import FedoraFinder
@@ -186,8 +186,7 @@ class MultiOSDownloadFinder:
                 downloadable = [
                     url
                     for url in links.values()
-                    if (url.lower().endswith(ISO_EXTS) or url.startswith("mido://"))
-                    and url not in written
+                    if (is_iso_url(url) or url.startswith("mido://")) and url not in written
                 ]
                 if not downloadable:
                     continue

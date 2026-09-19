@@ -24,9 +24,13 @@ pnpm audit --audit-level high
 
 The `fix/v0.1.5-hardening` branch binds verification markers to the stable requested source URL, resolves checksums against the effective mirror and published filename when `--output` renames a file, terminates curl/aria2 options before URLs, makes file logging non-fatal, isolates rotating Fedora keys, closes streaming responses on every path, and corrects curl identity and resume totals.
 
+The follow-up hardening branch makes `--no-resume` clear aria2 partial state, restores cached Mido scripts from the pinned commit before execution, removes the competing per-file stdin prompt, and recognizes signed or tokenized ISO URLs by their parsed path.
+
 Repository maintenance removes generated finder output from Git, pins workflow actions and permissions, narrows source-distribution contents, adds npm Dependabot coverage, moves package metadata to one version source, updates Ruff to 0.16.7, and uses installed command names in user-facing hints.
 
 Verified locally on Python 3.10 and 3.13: Ruff passed; each interpreter passed 106 tests with 2 optional-backend skips; wheel and source archives built; an unrelated untracked file was excluded from the sdist; both archives installed into clean environments and both CLIs reported 0.1.5; all workflow YAML parsed; all 15 live finders resolved; and Python plus pnpm audits reported no known dependency vulnerabilities.
+
+Follow-up verification: Python 3.10 and 3.13 each passed 111 tests with 2 optional-backend skips; Ruff, package builds, and the pnpm audit passed.
 
 ## Durable Notes
 

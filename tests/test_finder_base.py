@@ -1,4 +1,4 @@
-from os_download.finders.base import BaseOSFinder
+from os_download.finders.base import BaseOSFinder, has_iso_link, url_kind
 
 
 class FakeResponse:
@@ -43,3 +43,17 @@ def test_verify_download_url_rejects_failed_head_and_get_requests():
     finder.session = FakeSession(head_status=404, get_status=404)
 
     assert not finder.verify_download_url("https://example.test/missing.iso")
+
+
+def test_iso_detection_uses_the_url_path():
+    url = "https://example.test/image.iso?token=temporary#download"
+
+    assert has_iso_link({"override": url})
+    assert url_kind(url) == ("ISO", "green")
+
+
+def test_iso_detection_rejects_malformed_urls():
+    url = "https://[invalid/image.iso"
+
+    assert not has_iso_link({"override": url})
+    assert url_kind(url) == ("link", "yellow")

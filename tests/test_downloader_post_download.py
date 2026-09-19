@@ -433,7 +433,7 @@ def test_download_from_file_retries_failed_downloads_after_session(tmp_path: Pat
     assert calls == [urls[0], urls[1], urls[0]]
 
 
-def test_download_from_file_skips_failed_file_and_continues_by_default(
+def test_download_from_file_continues_without_a_per_file_prompt(
     tmp_path: Path, monkeypatch
 ):
     manager = DownloadManager(download_dir=str(tmp_path), backend="python")
@@ -441,7 +441,6 @@ def test_download_from_file_skips_failed_file_and_continues_by_default(
         "https://example.test/fail.iso",
         "https://example.test/next.iso",
     ]
-    answers = iter(["", ""])
     prompts = []
     calls = []
 
@@ -460,14 +459,14 @@ def test_download_from_file_skips_failed_file_and_continues_by_default(
 
     def fake_input(prompt=""):
         prompts.append(prompt)
-        return next(answers)
+        return ""
 
     monkeypatch.setattr("builtins.input", fake_input)
     monkeypatch.setattr(manager, "_read_urls", lambda path: urls)
     monkeypatch.setattr(manager, "download_file", fake_download_file)
 
     assert not manager.download_from_file("ignored.txt", interactive=True, parallel=1)
-    assert any("Skip this file and continue? [dim](Y/n)[/dim]" in prompt for prompt in prompts)
+    assert all("Skip this file and continue?" not in prompt for prompt in prompts)
     assert calls == urls
 
 
