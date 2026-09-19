@@ -25,6 +25,12 @@ def ensure_mido(mido_dir: Path = MIDO_DIR) -> Path | None:
     ref = mido_ref()
 
     if script.exists() and _checked_out_ref(mido_dir) == ref:
+        try:
+            _git(mido_dir, "checkout", "--quiet", "--force", "HEAD", "--", script.name)
+        except subprocess.CalledProcessError as exc:
+            logger.error("MIDO RESTORE FAILED  %s  -  %s", ref, exc)
+            return None
+        script.chmod(0o755)
         return script
 
     if shutil.which("git") is None:

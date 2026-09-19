@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 import requests
 
@@ -65,15 +66,19 @@ class BaseOSFinder:
 
 
 def has_iso_link(links: dict[str, str]) -> bool:
-    return any(
-        url.lower().endswith(ISO_EXTS) or url.startswith("mido://")
-        for url in links.values()
-    )
+    return any(is_iso_url(url) or url.startswith("mido://") for url in links.values())
+
+
+def is_iso_url(url: str) -> bool:
+    try:
+        return urlsplit(url).path.lower().endswith(ISO_EXTS)
+    except ValueError:
+        return False
 
 
 def url_kind(url: str) -> tuple[str, str]:
     if url.startswith("mido://"):
         return "Mido", "blue"
-    if url.lower().endswith(ISO_EXTS):
+    if is_iso_url(url):
         return "ISO", "green"
     return "link", "yellow"

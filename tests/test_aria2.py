@@ -100,6 +100,43 @@ def test_python_backend_still_finishes_a_partial_aria2_download_with_aria2(
     assert manager._use_aria2(partial)
 
 
+def test_no_resume_discards_payload_and_control_file_before_aria2(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="aria2")
+    payload = tmp_path / "image.iso"
+    payload.write_bytes(b"stale")
+    control = tmp_path / ("image.iso" + CONTROL_SUFFIX)
+    control.write_bytes(b"control")
+
+    monkeypatch.setattr(manager_module, "aria2_available", lambda: True)
+
+    def fake_download(url, filepath, connections, progress, task_id, stop_event):
+        assert not filepath.exists()
+        assert not control.exists()
+        filepath.write_bytes(b"fresh")
+        return True
+
+    monkeypatch.setattr(manager_module, "download_with_aria2", fake_download)
+
+    assert manager.download_file(
+        "https://example.test/image.iso", resume=False, verify=False, decompress=False
+    )
+    assert payload.read_bytes() == b"fresh"
+
+
+def test_no_resume_aborts_when_partial_state_cannot_be_removed(tmp_path: Path, monkeypatch):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="aria2")
+    monkeypatch.setattr(manager, "_discard_partial", lambda filepath: False)
+    monkeypatch.setattr(
+        manager,
+        "_use_aria2",
+        lambda filepath: (_ for _ in ()).throw(AssertionError("cleanup must abort first")),
+    )
+
+    assert not manager.download_file(
+        "https://example.test/image.iso", resume=False, verify=False, decompress=False
+    )
+
+
 def test_a_url_aria2_cannot_fetch_falls_back_to_the_built_in_backend(tmp_path: Path, monkeypatch):
     # Some mirrors reject aria2 outright. Retrying it three times and giving up would fail a
     # file the plain client (and its curl-on-403 fallback) can fetch perfectly well.
