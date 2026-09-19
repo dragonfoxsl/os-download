@@ -3,6 +3,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import requests
 
@@ -81,7 +82,7 @@ def _fetch(session: requests.Session, url: str) -> str | None:
     return response.text
 
 
-def _effective_url(session: requests.Session, url: str) -> str:
+def effective_url(session: requests.Session, url: str) -> str:
     """Follow redirects once, so sibling files are looked for next to the real ISO.
 
     Redirectors like download.fedoraproject.org hand out a different mirror per request, so
@@ -101,11 +102,15 @@ def _effective_url(session: requests.Session, url: str) -> str:
 
 
 def resolve_checksum(
-    session: requests.Session, filepath: Path, url: str
+    session: requests.Session,
+    filepath: Path,
+    url: str,
+    *,
+    effective_source_url: str | None = None,
 ) -> ChecksumSource | None:
     """Find the published hash for a download, and the document it came from."""
-    filename = filepath.name
-    url = _effective_url(session, url)
+    url = effective_source_url or effective_url(session, url)
+    filename = Path(unquote(urlsplit(url).path)).name or filepath.name
 
     for suffix in SIDECAR_SUFFIXES:
         sidecar_url = url + suffix

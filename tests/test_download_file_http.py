@@ -28,6 +28,7 @@ class RangeHandler(BaseHTTPRequestHandler):
     """
 
     served = 0  # bytes of PAYLOAD written, so a test can tell a resume from a refetch
+    forbidden_hits: dict[str, int] = {}
 
     def log_message(self, *args):
         return
@@ -42,9 +43,10 @@ class RangeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler API
         # Mirrors the real case the curl fallback exists for: the mirror rejects the
-        # library's request but serves the same file happily to curl.
+        # library's first request but serves the same file when the curl fallback retries.
         if self.path == "/forbidden.iso":
-            if "curl" not in self.headers.get("User-Agent", "").lower():
+            RangeHandler.forbidden_hits[self.path] = RangeHandler.forbidden_hits.get(self.path, 0) + 1
+            if RangeHandler.forbidden_hits[self.path] == 1:
                 self.send_response(403)
                 self.send_header("content-length", "0")
                 self.end_headers()
@@ -56,14 +58,15 @@ class RangeHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/forbidden-404.iso":
-            if "curl" not in self.headers.get("User-Agent", "").lower():
+            RangeHandler.forbidden_hits[self.path] = RangeHandler.forbidden_hits.get(self.path, 0) + 1
+            if RangeHandler.forbidden_hits[self.path] == 1:
                 self.send_response(403)
                 self.send_header("content-length", "0")
             else:
                 self.send_response(404)
                 self.send_header("content-length", "10")
             self.end_headers()
-            if "curl" in self.headers.get("User-Agent", "").lower():
+            if RangeHandler.forbidden_hits[self.path] > 1:
                 self.wfile.write(b"not an iso")
             return
 
@@ -137,6 +140,7 @@ class RangeHandler(BaseHTTPRequestHandler):
 @pytest.fixture
 def server():
     RangeHandler.served = 0
+    RangeHandler.forbidden_hits = {}
     httpd = HTTPServer(("127.0.0.1", 0), RangeHandler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -287,6 +291,48 @@ def test_download_file_refuses_to_overwrite_a_symlink(tmp_path: Path, server: st
 
     assert not manager.download_file(f"{server}/file.iso", filename="output.iso")
     assert target.read_bytes() == b"keep me"
+
+
+def test_download_file_closes_a_permanent_error_response(tmp_path: Path):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python", max_retries=1)
+
+    class Response:
+        status_code = 404
+        headers = {}
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    manager.session.get = lambda *args, **kwargs: response
+
+    assert not manager.download_file("https://example.test/missing.iso", verify=False)
+    assert response.closed
+
+
+def test_download_file_closes_a_response_when_streaming_fails(tmp_path: Path):
+    manager = DownloadManager(download_dir=str(tmp_path), backend="python", max_retries=1)
+
+    class Response:
+        status_code = 200
+        headers = {"content-length": "4"}
+        closed = False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            raise RuntimeError("stream failed")
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    manager.session.get = lambda *args, **kwargs: response
+
+    assert not manager.download_file("https://example.test/image.iso", verify=False)
+    assert response.closed
 
 
 @pytest.mark.skipif(shutil.which("aria2c") is None, reason="aria2c is not installed")

@@ -79,3 +79,31 @@ def test_a_signature_from_the_pinned_key_is_accepted(tmp_path: Path, monkeypatch
 
     assert result.status is SignatureStatus.VALID
     assert result.ok
+
+
+def test_a_downloaded_keyring_is_isolated_from_persistent_keys(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(signatures.shutil, "which", lambda name: "/usr/bin/gpg")
+    monkeypatch.setattr(signatures, "_find_detached_signature", lambda session, url: b"sig")
+    keyrings = []
+    monkeypatch.setattr(
+        signatures,
+        "_ensure_keyring",
+        lambda keys, session, keyring_dir: keyrings.append(keyring_dir) or True,
+    )
+
+    class GoodSignature:
+        returncode = 0
+        stdout = "[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 now\n"
+        stderr = ""
+
+    monkeypatch.setattr(signatures, "_gpg", lambda *args, **kwargs: GoodSignature())
+
+    result = verify_checksum_file(
+        None,
+        "https://fedoraproject.org/Fedora-CHECKSUM",
+        "text",
+        keyring_dir=tmp_path / "persistent",
+    )
+
+    assert result.status is SignatureStatus.VALID
+    assert keyrings[0] != tmp_path / "persistent"

@@ -1,6 +1,6 @@
 [project]
 name = "os-download"
-version = "0.1.4"
+dynamic = ["version"]
 description = "Find and download OS ISO images for Ubuntu, Fedora, openSUSE, Arch, Linux Mint, Rocky Linux, Windows 11, and more"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -59,3 +59,18 @@ ignore = ["E501"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/os_download"]
+
+[tool.hatch.version]
+path = "src/os_download/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/LICENSE",
+    "/README.md",
+    "/CONTRIBUTING.md",
+    "/SECURITY.md",
+    "/pyproject.toml",
+    "/uv.lock",
+]

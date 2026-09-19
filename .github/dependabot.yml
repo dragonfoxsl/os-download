@@ -35,3 +35,20 @@ updates:
       github-actions:
         patterns:
           - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "09:15"
+      timezone: "Asia/Colombo"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+    groups:
+      javascript-dependencies:
+        patterns:
+          - "*"

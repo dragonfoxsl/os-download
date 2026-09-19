@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 
-from os_download.downloader.checksums import hash_file, resolve_checksum
+from os_download.downloader.checksums import effective_url, hash_file, resolve_checksum
 from os_download.downloader.signatures import (
     SignatureStatus,
     verify_checksum_file,
@@ -76,8 +76,13 @@ def read_marker(filepath: Path) -> dict | None:
     return record
 
 
-def write_marker(filepath: Path, digest: str, trusted: bool) -> None:
-    record = {**_fingerprint(filepath), "sha256": digest, "trusted": trusted}
+def write_marker(filepath: Path, digest: str, trusted: bool, source_url: str) -> None:
+    record = {
+        **_fingerprint(filepath),
+        "sha256": digest,
+        "trusted": trusted,
+        "source_url": source_url,
+    }
     marker = marker_path(filepath)
     temporary: Path | None = None
     try:
@@ -113,9 +118,14 @@ def verify_download(
     url: str,
     use_cache: bool = True,
 ) -> VerifyReport:
+    resolved_url = effective_url(session, url)
     if use_cache:
         cached = read_marker(filepath)
-        if cached is not None and cached.get("trusted") is True:
+        if (
+            cached is not None
+            and cached.get("trusted") is True
+            and cached.get("source_url") == url
+        ):
             # Re-hashing several GB on every run costs minutes and proves nothing new.
             logger.info("VERIFY CACHED  %s", filepath.name)
             return VerifyReport(
@@ -123,7 +133,7 @@ def verify_download(
                 "already verified and unchanged since",
             )
 
-    source = resolve_checksum(session, filepath, url)
+    source = resolve_checksum(session, filepath, url, effective_source_url=resolved_url)
     if source is None:
         return VerifyReport(VerifyStatus.NO_CHECKSUM, "the mirror publishes no checksum")
 
@@ -140,7 +150,7 @@ def verify_download(
         )
 
     trusted = signature.status is SignatureStatus.VALID
-    write_marker(filepath, digest, trusted)
+    write_marker(filepath, digest, trusted, url)
 
     if trusted:
         logger.info("VERIFY OK  %s  -  %s", filepath.name, signature.detail)

@@ -16,7 +16,7 @@ def stub_network(monkeypatch, payload: bytes, signature: SignatureStatus) -> lis
     hashed = []
     digest = hashlib.sha256(payload).hexdigest()
 
-    def fake_resolve(session, filepath, url):
+    def fake_resolve(session, filepath, url, **kwargs):
         hashed.append(filepath.name)
         return ChecksumSource(digest, URL + ".sha256", f"{digest}  {filepath.name}\n")
 
@@ -41,6 +41,28 @@ def test_verified_file_is_not_rehashed_on_the_next_run(tmp_path: Path, monkeypat
     # Re-hashing a multi-GB ISO on every run costs minutes and proves nothing new.
     second = verify_download(None, iso, URL)
     assert second.status is VerifyStatus.CACHED
+    assert resolved == ["image.iso"]
+
+
+def test_verified_cache_is_bound_to_the_source_url(tmp_path: Path, monkeypatch):
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"payload")
+    resolved = stub_network(monkeypatch, b"payload", SignatureStatus.VALID)
+
+    assert verify_download(None, iso, URL).status is VerifyStatus.VERIFIED
+    assert verify_download(None, iso, URL + "?mirror=other").status is VerifyStatus.VERIFIED
+    assert resolved == ["image.iso", "image.iso"]
+
+
+def test_redirecting_mirror_changes_do_not_invalidate_the_requested_source(tmp_path: Path, monkeypatch):
+    iso = tmp_path / "image.iso"
+    iso.write_bytes(b"payload")
+    resolved = stub_network(monkeypatch, b"payload", SignatureStatus.VALID)
+    mirrors = iter(("https://mirror-one.test/image.iso", "https://mirror-two.test/image.iso"))
+    monkeypatch.setattr(verification, "effective_url", lambda session, url: next(mirrors))
+
+    assert verify_download(None, iso, URL).status is VerifyStatus.VERIFIED
+    assert verify_download(None, iso, URL).status is VerifyStatus.CACHED
     assert resolved == ["image.iso"]
 
 
@@ -93,7 +115,7 @@ def test_marker_write_replaces_a_symlink_without_following_it(tmp_path: Path):
     marker = marker_path(iso)
     marker.symlink_to(target)
 
-    verification.write_marker(iso, "abc123", trusted=True)
+    verification.write_marker(iso, "abc123", trusted=True, source_url=URL)
 
     assert target.read_text(encoding="utf-8") == "keep"
     assert marker.is_file()

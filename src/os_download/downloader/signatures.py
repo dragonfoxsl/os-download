@@ -18,6 +18,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+from contextlib import ExitStack
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -206,38 +207,45 @@ def verify_checksum_file(
             SignatureStatus.UNAVAILABLE, "the mirror publishes no signature for the checksum file"
         )
 
-    if not _ensure_keyring(keys, session, keyring_dir):
+    with ExitStack() as stack:
+        if keys.keyring_url:
+            # Rotating distro keyrings must not inherit stale keys from prior releases.
+            keyring_dir = Path(stack.enter_context(tempfile.TemporaryDirectory()))
+
+        if not _ensure_keyring(keys, session, keyring_dir):
+            return SignatureResult(
+                SignatureStatus.UNAVAILABLE, f"could not obtain {keys.name} signing keys"
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            if clearsigned:
+                signed = tmp_path / "checksums.asc"
+                signed.write_text(checksum_text, encoding="utf-8")
+                result = _gpg("--verify", str(signed), keyring_dir=keyring_dir)
+            else:
+                data = tmp_path / "checksums"
+                signature = tmp_path / "checksums.sig"
+                data.write_text(checksum_text, encoding="utf-8")
+                signature.write_bytes(detached or b"")
+                result = _gpg("--verify", str(signature), str(data), keyring_dir=keyring_dir)
+
+        signer = _valid_signer(result.stdout)
+        if result.returncode != 0 or signer is None:
+            return SignatureResult(
+                SignatureStatus.INVALID,
+                "the signature on the checksum file is not valid",
+                signer,
+            )
+
+        if keys.fingerprints and signer not in {f.upper() for f in keys.fingerprints}:
+            # A good signature from the wrong key is exactly what a substituted key looks like.
+            return SignatureResult(
+                SignatureStatus.INVALID,
+                f"signed by {signer}, which is not a pinned {keys.name} signing key",
+                signer,
+            )
+
         return SignatureResult(
-            SignatureStatus.UNAVAILABLE, f"could not obtain {keys.name} signing keys"
+            SignatureStatus.VALID, f"signed by {keys.name} key {signer}", signer
         )
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        if clearsigned:
-            signed = tmp_path / "checksums.asc"
-            signed.write_text(checksum_text, encoding="utf-8")
-            result = _gpg("--verify", str(signed), keyring_dir=keyring_dir)
-        else:
-            data = tmp_path / "checksums"
-            signature = tmp_path / "checksums.sig"
-            data.write_text(checksum_text, encoding="utf-8")
-            signature.write_bytes(detached or b"")
-            result = _gpg("--verify", str(signature), str(data), keyring_dir=keyring_dir)
-
-    signer = _valid_signer(result.stdout)
-    if result.returncode != 0 or signer is None:
-        return SignatureResult(
-            SignatureStatus.INVALID,
-            "the signature on the checksum file is not valid",
-            signer,
-        )
-
-    if keys.fingerprints and signer not in {f.upper() for f in keys.fingerprints}:
-        # A good signature from the wrong key is exactly what a substituted key looks like.
-        return SignatureResult(
-            SignatureStatus.INVALID,
-            f"signed by {signer}, which is not a pinned {keys.name} signing key",
-            signer,
-        )
-
-    return SignatureResult(SignatureStatus.VALID, f"signed by {keys.name} key {signer}", signer)

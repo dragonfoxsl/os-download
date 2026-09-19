@@ -242,7 +242,8 @@ Every download is verified by default. Two things are checked, in this order:
    matching hash. Ubuntu, Debian, Linux Mint and Fedora sign their checksum files, and their
    signing keys are pinned in `downloader/signatures.py`. Keys are only ever imported *by
    pinned fingerprint*, or from a keyring published over HTTPS by the distribution itself
-   (Fedora rotates its key every release), so a mirror can never introduce a key of its own.
+   and loaded into an isolated temporary GPG home (Fedora rotates its key every release), so
+   a mirror can never introduce a key of its own.
 2. **The SHA256 hash** of the file, once the document it came from is known to be authentic.
 
 | Outcome | What it means | Result |
@@ -255,8 +256,9 @@ Every download is verified by default. Two things are checked, in this order:
 
 A file that fails verification is renamed to `<name>.corrupt` rather than left in place, so a
 later resume cannot append to bad bytes. Authentically verified files record a `.verified`
-marker, so a multi-gigabyte ISO is not re-hashed on every run. Unsigned hash-only results are
-always checked again and never satisfy `--require-signature` through the cache.
+marker bound to the requested source URL, so a multi-gigabyte ISO is not re-hashed on every
+run and a different source cannot inherit another source's trust. Unsigned hash-only results
+are always checked again and never satisfy `--require-signature` through the cache.
 
 Signature verification needs `gpg` on `PATH`; without it, verification falls back to
 hash-only and says so.
@@ -353,9 +355,8 @@ class MyOSFinder(BaseOSFinder):
 Pushing a `vX.Y.Z` tag publishes to PyPI. The workflow authenticates with a [Trusted Publisher](https://docs.pypi.org/trusted-publishers/) over OIDC, so no API token is stored anywhere.
 
 ```bash
-# 1. Bump the version in BOTH places — the workflow aborts if the tag does not match
-#    pyproject.toml            version = "0.1.4"
-#    src/os_download/__init__.py   __version__ = "0.1.4"
+# 1. Bump the single source version — the workflow aborts if the tag does not match
+#    src/os_download/__init__.py   __version__ = "0.1.5"
 
 # 2. Update the README for anything user-facing (flags, defaults, behaviour), and
 #    regenerate the screenshots if the CLI or dashboard changed
@@ -369,7 +370,7 @@ pnpm render-images
 uv sync --locked && uv run ruff check && uv run pytest -q && uv build
 
 # 4. Tag and push
-git tag -a v0.1.4 -m "os-download 0.1.4" && git push origin v0.1.4
+git tag -a v0.1.5 -m "os-download 0.1.5" && git push origin v0.1.5
 ```
 
 Get the README right *before* tagging: the PyPI project page is baked in at upload time, so a later README fix will not appear there without a new release. A published version can be yanked but never re-uploaded.

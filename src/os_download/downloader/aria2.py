@@ -64,6 +64,7 @@ def download_with_aria2(
         str(filepath.parent),
         "--out",
         filepath.name,
+        "--",
         url,
     ]
 
