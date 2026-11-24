@@ -235,6 +235,8 @@ is discarded and restarted safely.
 
 ## Verification
 
+Run `uv audit --locked` from the repository to check locked Python dependencies for known vulnerabilities.
+
 Every download is verified by default. Two things are checked, in this order:
 
 1. **The signature on the checksum file.** A hash fetched from the same mirror as the ISO
