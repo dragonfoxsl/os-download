@@ -22,6 +22,8 @@ pnpm audit --audit-level high
 
 ## Current Maintenance
 
+The HTTPS dependency update locks certifi 2026.10.19 and urllib3 2.8.0. On Python 3.13, the locked audit and lint passed, 111 tests passed (2 skipped), both CLIs reported their version, and the wheel and source distribution built successfully.
+
 The `fix/v0.1.5-hardening` branch binds verification markers to the stable requested source URL, resolves checksums against the effective mirror and published filename when `--output` renames a file, terminates curl/aria2 options before URLs, makes file logging non-fatal, isolates rotating Fedora keys, closes streaming responses on every path, and corrects curl identity and resume totals.
 
 The follow-up hardening branch makes `--no-resume` clear aria2 partial state, restores cached Mido scripts from the pinned commit before execution, removes the competing per-file stdin prompt, and recognizes signed or tokenized ISO URLs by their parsed path.
